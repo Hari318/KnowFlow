@@ -9,9 +9,11 @@ export interface Document {
   file_type: string;
   mime_type: string;
   file_size: number;
+  version_number: number;
+  summary: string | null;
+  summary_generated_at: string | null;
   created_at: string;
   updated_at: string;
-  version_number: number;
 }
 
 export function listDocuments(workspaceId: string, collectionId: string, search?: string) {
@@ -59,6 +61,13 @@ export function deleteDocument(workspaceId: string, collectionId: string, docume
   return apiFetch<void>(
     `/workspaces/${workspaceId}/collections/${collectionId}/documents/${documentId}`,
     { method: "DELETE" }
+  );
+}
+
+export function summarizeDocument(workspaceId: string, collectionId: string, documentId: string) {
+  return apiFetch<Document>(
+    `/workspaces/${workspaceId}/collections/${collectionId}/documents/${documentId}/summarize`,
+    { method: "POST" }
   );
 }
 

@@ -324,7 +324,10 @@ def summarize_document(
             detail="No extractable text found in this document",
         )
 
-    summary = llm.summarize(text)
+    try:
+        summary = llm.summarize(text)
+    except RuntimeError as e:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(e))
 
     document.summary = summary
     document.summary_generated_at = datetime.now(timezone.utc)

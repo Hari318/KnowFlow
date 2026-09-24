@@ -11,7 +11,7 @@ import {
     deleteDocument,
     Document,
 } from "@/lib/documents";
-import { replaceDocument, listDocumentVersions, getVersionDownloadUrl, DocumentVersion } from "@/lib/documents";
+import {replaceDocument, listDocumentVersions, getVersionDownloadUrl, DocumentVersion} from "@/lib/documents";
 import {formatFileSize} from "@/lib/format";
 import {Button} from "@/components/Button";
 import {Card} from "@/components/Card";
@@ -19,7 +19,9 @@ import {getUploadLimits, UploadLimits} from "@/lib/config";
 import {PreviewModal} from "@/components/PreviewModal";
 import {Input} from "@/components/Input";
 import {Modal} from "@/components/Modal";
-import { Eye, Download, RefreshCw, History, Trash2 } from "lucide-react";
+import {Eye, Download, RefreshCw, History, Trash2} from "lucide-react";
+import {summarizeDocument} from "@/lib/documents";
+import {Sparkles} from "lucide-react";
 
 export default function CollectionDetailPage() {
     const {workspaceId, collectionId} = useParams<{
@@ -45,6 +47,9 @@ export default function CollectionDetailPage() {
     const replaceInputRef = useRef<HTMLInputElement>(null);
     const [replacingDocId, setReplacingDocId] = useState<string | null>(null);
 
+    const [summarizingId, setSummarizingId] = useState<string | null>(null);
+    const [summaryDoc, setSummaryDoc] = useState<Document | null>(null);
+
     function loadDocuments(searchTerm?: string) {
         listDocuments(workspaceId, collectionId, searchTerm)
             .then(setDocuments)
@@ -59,13 +64,13 @@ export default function CollectionDetailPage() {
         });
     }, [workspaceId, collectionId]);
 
-      useEffect(() => {
-          const timeout = setTimeout(() => {
-              loadDocuments(search || undefined);
-          }, 400);
-          return () => clearTimeout(timeout);
-          // eslint-disable-next-line react-hooks/exhaustive-deps
-      }, [search]);
+    useEffect(() => {
+        const timeout = setTimeout(() => {
+            loadDocuments(search || undefined);
+        }, 400);
+        return () => clearTimeout(timeout);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [search]);
 
     async function handleDeleteCollection() {
         if (!confirm("Delete this collection? This cannot be undone.")) return;
@@ -184,6 +189,20 @@ export default function CollectionDetailPage() {
         }
     }
 
+    async function handleSummarize(doc: Document) {
+        setSummarizingId(doc.id);
+        setUploadError(null);
+        try {
+            const updated = await summarizeDocument(workspaceId, collectionId, doc.id);
+            loadDocuments(search || undefined);
+            setSummaryDoc(updated);
+        } catch (err) {
+            setUploadError(err instanceof Error ? err.message : "Summarization failed");
+        } finally {
+            setSummarizingId(null);
+        }
+    }
+
     if (error) return <p className="text-danger">{error}</p>;
     if (!collection) return <p className="text-muted">Loading...</p>;
 
@@ -271,6 +290,24 @@ export default function CollectionDetailPage() {
                         <div className="flex gap-2">
                             <Button
                                 variant="secondary"
+                                title={doc.summary ? "View summary" : "Summarize"}
+                                disabled={summarizingId === doc.id}
+                                onClick={() => {
+                                    setUploadError(null);
+                                    if (doc.summary) {
+                                        setSummaryDoc(doc);
+                                    } else {
+                                        handleSummarize(doc);
+                                    }
+                                }}
+                            >
+                                <Sparkles size={16}/>
+                            </Button>
+                            {summarizingId === doc.id && (
+                                <span className="text-xs text-muted self-center">Summarizing...</span>
+                            )}
+                            <Button
+                                variant="secondary"
                                 title="Preview"
                                 onClick={() => handlePreview(doc)}
                             >
@@ -352,6 +389,33 @@ export default function CollectionDetailPage() {
                     {versions.length === 0 && (
                         <p className="text-muted text-sm">No previous versions yet.</p>
                     )}
+                </div>
+            </Modal>
+            <Modal open={summaryDoc !== null} onClose={() => setSummaryDoc(null)} size="lg">
+                <h2 className="text-lg font-medium text-foreground mb-2 break-words">
+                    Summary — {summaryDoc?.name}
+                </h2>
+                {summaryDoc?.summary_generated_at && (
+                    <p className="text-xs text-muted mb-4">
+                        Generated {new Date(summaryDoc.summary_generated_at).toLocaleString()}
+                    </p>
+                )}
+                <div className="text-sm text-foreground space-y-2">
+                    {summaryDoc?.summary?.split("\n").map((line, i) => {
+                        const trimmed = line.trim().replace(/\*\*/g, "");
+                        if (!trimmed) return null;
+
+                        if (trimmed.startsWith("- ") || trimmed.startsWith("• ")) {
+                            return (
+                                <div key={i} className="flex gap-2 pl-1">
+                                    <span className="text-accent">•</span>
+                                    <span>{trimmed.replace(/^[-•]\s*/, "")}</span>
+                                </div>
+                            );
+                        }
+
+                        return <p key={i}>{trimmed}</p>;
+                    })}
                 </div>
             </Modal>
         </div>

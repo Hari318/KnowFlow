@@ -15,7 +15,7 @@ class Settings(BaseSettings):
 
     max_upload_size_mb: int = 20
 
-    anthropic_api_key: str
+    anthropic_api_key: str | None = None
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
