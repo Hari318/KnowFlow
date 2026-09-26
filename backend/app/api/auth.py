@@ -21,21 +21,20 @@ from app.services.auth import (
     hash_password,
     verify_password,
 )
+from app.api.deps import get_current_user
+from datetime import datetime, timezone
+
+from app.models.workspace_invite import WorkspaceInvite
+from app.models.workspace_member import WorkspaceMember
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 @router.post("/register", response_model=UserOut, status_code=status.HTTP_201_CREATED)
 def register(payload: UserCreate, db: Session = Depends(get_db)):
-    existing = db.execute(
-        select(User).where(User.email == payload.email)
-    ).scalar_one_or_none()
-
+    existing = db.execute(select(User).where(User.email == payload.email)).scalar_one_or_none()
     if existing:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Email is already registered",
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email is already registered")
 
     user = User(
         email=payload.email,
@@ -43,12 +42,35 @@ def register(payload: UserCreate, db: Session = Depends(get_db)):
         first_name=payload.first_name,
         last_name=payload.last_name,
     )
-
     db.add(user)
     db.commit()
     db.refresh(user)
 
-    return user
+    invited_workspace_id = None
+
+    if payload.invite_token:
+        invite = db.execute(
+            select(WorkspaceInvite).where(
+                WorkspaceInvite.token == payload.invite_token,
+                WorkspaceInvite.accepted_at.is_(None),
+                WorkspaceInvite.email == payload.email,
+            )
+        ).scalar_one_or_none()
+
+        if invite is not None:
+            db.add(WorkspaceMember(workspace_id=invite.workspace_id, user_id=user.id, role=invite.role))
+            invite.accepted_at = datetime.now(timezone.utc)
+            invited_workspace_id = invite.workspace_id
+            db.commit()
+
+    return UserOut(
+        id=user.id,
+        email=user.email,
+        first_name=user.first_name,
+        last_name=user.last_name,
+        created_at=user.created_at,
+        invited_workspace_id=invited_workspace_id,
+    )
 
 
 @router.post("/login", response_model=Token)
@@ -90,3 +112,7 @@ def refresh(payload: RefreshRequest, db: Session = Depends(get_db)):
         )
 
     return AccessTokenOut(access_token=create_access_token(user.id))
+
+@router.get("/me", response_model=UserOut)
+def get_me(current_user: User = Depends(get_current_user)):
+    return current_user

@@ -9,8 +9,10 @@ import { Button } from "@/components/Button";
 import { Input } from "@/components/Input";
 import { Card } from "@/components/Card";
 import { Modal } from "@/components/Modal";
-import { listNotes, createNote, deleteNote, Note } from "@/lib/notes";
+import { listNotes, deleteNote, Note } from "@/lib/notes";
 import { useWorkspaces } from "@/lib/workspaces-context";
+import { listMembers, Member } from "@/lib/members";
+import { useApp } from "@/lib/app-context";
 
 export default function WorkspaceDetailPage() {
   const { workspaceId } = useParams<{ workspaceId: string }>();
@@ -28,6 +30,12 @@ export default function WorkspaceDetailPage() {
   const [notes, setNotes] = useState<Note[]>([]);
   const { refresh } = useWorkspaces();
 
+  const [members, setMembers] = useState<Member[]>([]);
+  const { currentUser, setActiveWorkspace } = useApp();
+  const isOwner = currentUser
+    ? members.some((m) => m.user_id === currentUser.id && m.role === "owner")
+    : false;
+
   function loadCollections() {
     listCollections(workspaceId)
       .then(setCollections)
@@ -40,13 +48,27 @@ export default function WorkspaceDetailPage() {
       .catch((err) => setError(err.message));
   }
 
+  function loadMembers() {
+    listMembers(workspaceId)
+      .then(setMembers)
+      .catch((err) => setError(err.message));
+  }
+
   useEffect(() => {
     workspaceService.get(workspaceId)
       .then(setWorkspace)
       .catch((err) => setError(err.message));
     loadCollections();
     loadNotes();
+    loadMembers();
   }, [workspaceId]);
+
+  useEffect(() => {
+  if (currentUser) {
+    setActiveWorkspace({ workspaceId, members, isOwner });
+  }
+  return () => setActiveWorkspace(null);
+  }, [workspaceId, members, currentUser, isOwner]);
 
   async function handleDelete() {
     if (!confirm("Delete this workspace? This cannot be undone.")) return;
@@ -103,12 +125,16 @@ export default function WorkspaceDetailPage() {
             )}
           </div>
           <div className="flex gap-2">
-            <Link href={`/dashboard/${workspace.id}/edit`}>
-              <Button variant="secondary">Edit</Button>
-            </Link>
-            <Button variant="danger" onClick={handleDelete}>
-              Delete
-            </Button>
+            {isOwner && (
+                <>
+                  <Link href={`/dashboard/${workspace.id}/edit`}>
+                    <Button variant="secondary">Edit</Button>
+                  </Link>
+                  <Button variant="danger" onClick={handleDelete}>
+                    Delete
+                  </Button>
+                </>
+            )}
           </div>
         </div>
         <p className="text-xs text-muted mt-4">

@@ -11,6 +11,7 @@ class UserCreate(BaseModel):
     password: str = Field(min_length=8)
     first_name: str = Field(min_length=1, max_length=100)
     last_name: str | None = None
+    invite_token: str | None = None
 
 
 class UserLogin(BaseModel):
@@ -24,6 +25,7 @@ class UserOut(BaseModel):
     first_name: str
     last_name: str | None
     created_at: datetime
+    invited_workspace_id: uuid.UUID | None = None
 
     model_config = ConfigDict(from_attributes=True)
 

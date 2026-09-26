@@ -17,6 +17,9 @@ class Settings(BaseSettings):
 
     anthropic_api_key: str | None = None
 
+    resend_api_key: str | None = None
+    frontend_url: str = "http://localhost:3000"
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 

@@ -12,15 +12,9 @@ from app.models.note import Note
 from app.models.user import User
 from app.models.workspace import Workspace
 from app.schemas.note import NoteCreate, NoteOut, NoteUpdate
+from app.api.access import get_workspace_or_404
 
 router = APIRouter(prefix="/workspaces/{workspace_id}/notes", tags=["notes"])
-
-
-def _get_owned_workspace(workspace_id: uuid.UUID, current_user: User, db: Session) -> Workspace:
-    workspace = db.get(Workspace, workspace_id)
-    if workspace is None or workspace.user_id != current_user.id:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found")
-    return workspace
 
 
 @router.post("", response_model=NoteOut, status_code=status.HTTP_201_CREATED)
@@ -30,7 +24,7 @@ def create_note(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    _get_owned_workspace(workspace_id, current_user, db)
+    get_workspace_or_404(workspace_id, current_user, db)
 
     note = Note(
         workspace_id=workspace_id,
@@ -52,7 +46,7 @@ def list_notes(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    _get_owned_workspace(workspace_id, current_user, db)
+    get_workspace_or_404(workspace_id, current_user, db)
 
     notes = db.execute(
         select(Note).where(Note.workspace_id == workspace_id)
@@ -68,7 +62,7 @@ def get_note(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    _get_owned_workspace(workspace_id, current_user, db)
+    get_workspace_or_404(workspace_id, current_user, db)
 
     note = db.get(Note, note_id)
     if note is None or note.workspace_id != workspace_id:
@@ -85,7 +79,7 @@ def update_note(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    _get_owned_workspace(workspace_id, current_user, db)
+    get_workspace_or_404(workspace_id, current_user, db)
 
     note = db.get(Note, note_id)
     if note is None or note.workspace_id != workspace_id:
@@ -109,7 +103,7 @@ def delete_note(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    _get_owned_workspace(workspace_id, current_user, db)
+    get_workspace_or_404(workspace_id, current_user, db)
 
     note = db.get(Note, note_id)
     if note is None or note.workspace_id != workspace_id:

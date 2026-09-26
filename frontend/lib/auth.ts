@@ -11,6 +11,23 @@ export interface AccessTokenResponse {
   token_type: string;
 }
 
+export interface CurrentUser {
+  id: string;
+  email: string;
+  first_name: string;
+  last_name: string | null;
+  created_at: string;
+}
+
+export interface RegisterResponse {
+  id: string;
+  email: string;
+  first_name: string;
+  last_name: string | null;
+  created_at: string;
+  invited_workspace_id: string | null;
+}
+
 export async function login(email: string, password: string) {
   const data = await apiFetch<AuthResponse>("/auth/login", {
     method: "POST",
@@ -26,11 +43,12 @@ export async function register(
   email: string,
   password: string,
   first_name: string,
-  last_name?: string
-) {
-  return apiFetch("/auth/register", {
+  last_name?: string,
+  invite_token?: string
+): Promise<RegisterResponse> {
+  return apiFetch<RegisterResponse>("/auth/register", {
     method: "POST",
-    body: JSON.stringify({ email, password, first_name, last_name }),
+    body: JSON.stringify({ email, password, first_name, last_name, invite_token }),
     skipAuth: true,
   });
 }
@@ -47,6 +65,10 @@ export async function refreshAccessToken(): Promise<string> {
 
   localStorage.setItem("access_token", data.access_token);
   return data.access_token;
+}
+
+export function getMe() {
+  return apiFetch<CurrentUser>("/auth/me");
 }
 
 export function logout() {

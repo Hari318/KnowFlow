@@ -7,10 +7,8 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
 from app.db.database import get_db
-from app.models.collection import Collection
 from app.models.document import Document
 from app.models.user import User
-from app.models.workspace import Workspace
 from app.repositories.document_repository import DocumentRepository, get_document_repository
 from app.schemas.document import DocumentDownloadOut, DocumentOut
 from app.services.storage import ALLOWED_EXTENSIONS, StorageBackend, build_storage_key, get_storage_backend
@@ -25,6 +23,7 @@ from datetime import datetime, timezone
 
 from app.services.llm import LLMProvider, get_llm_provider
 from app.services.text_extraction import extract_text
+from app.api.access import get_owned_collection
 
 router = APIRouter(
     prefix="/workspaces/{workspace_id}/collections/{collection_id}/documents",
@@ -38,19 +37,6 @@ def _get_repo(db: Session = Depends(get_db)) -> DocumentRepository:
 def _get_version_repo(db: Session = Depends(get_db)) -> DocumentVersionRepository:
     return get_document_version_repository(db)
 
-def _get_owned_collection(
-    workspace_id: uuid.UUID, collection_id: uuid.UUID, current_user: User, db: Session
-) -> Collection:
-    workspace = db.get(Workspace, workspace_id)
-    if workspace is None or workspace.user_id != current_user.id:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found")
-
-    collection = db.get(Collection, collection_id)
-    if collection is None or collection.workspace_id != workspace_id:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Collection not found")
-
-    return collection
-
 
 @router.post("", response_model=DocumentOut, status_code=status.HTTP_201_CREATED)
 async def upload_document(
@@ -62,7 +48,7 @@ async def upload_document(
     storage: StorageBackend = Depends(get_storage_backend),
     repo: DocumentRepository = Depends(_get_repo),
 ):
-    _get_owned_collection(workspace_id, collection_id, current_user, db)
+    get_owned_collection(workspace_id, collection_id, current_user, db)
 
     if not file.filename or "." not in file.filename:
         raise HTTPException(
@@ -119,7 +105,7 @@ def list_documents(
     db: Session = Depends(get_db),
     repo: DocumentRepository = Depends(_get_repo),
 ):
-    _get_owned_collection(workspace_id, collection_id, current_user, db)
+    get_owned_collection(workspace_id, collection_id, current_user, db)
     return repo.list_for_collection(collection_id, search=search)
 
 
@@ -132,7 +118,7 @@ def get_document(
     db: Session = Depends(get_db),
     repo: DocumentRepository = Depends(_get_repo),
 ):
-    _get_owned_collection(workspace_id, collection_id, current_user, db)
+    get_owned_collection(workspace_id, collection_id, current_user, db)
     document = repo.get_by_id(document_id)
     if document is None or document.collection_id != collection_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
@@ -149,7 +135,7 @@ def download_document(
     storage: StorageBackend = Depends(get_storage_backend),
     repo: DocumentRepository = Depends(_get_repo),
 ):
-    _get_owned_collection(workspace_id, collection_id, current_user, db)
+    get_owned_collection(workspace_id, collection_id, current_user, db)
     document = repo.get_by_id(document_id)
     if document is None or document.collection_id != collection_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
@@ -168,7 +154,7 @@ def delete_document(
     storage: StorageBackend = Depends(get_storage_backend),
     repo: DocumentRepository = Depends(_get_repo),
 ):
-    _get_owned_collection(workspace_id, collection_id, current_user, db)
+    get_owned_collection(workspace_id, collection_id, current_user, db)
     document = repo.get_by_id(document_id)
     if document is None or document.collection_id != collection_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
@@ -188,7 +174,7 @@ async def replace_document(
     repo: DocumentRepository = Depends(_get_repo),
     version_repo: DocumentVersionRepository = Depends(_get_version_repo),
 ):
-    _get_owned_collection(workspace_id, collection_id, current_user, db)
+    get_owned_collection(workspace_id, collection_id, current_user, db)
 
     document = repo.get_by_id(document_id)
     if document is None or document.collection_id != collection_id:
@@ -257,7 +243,7 @@ def list_document_versions(
     repo: DocumentRepository = Depends(_get_repo),
     version_repo: DocumentVersionRepository = Depends(_get_version_repo),
 ):
-    _get_owned_collection(workspace_id, collection_id, current_user, db)
+    get_owned_collection(workspace_id, collection_id, current_user, db)
     document = repo.get_by_id(document_id)
     if document is None or document.collection_id != collection_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
@@ -277,7 +263,7 @@ def download_document_version(
     repo: DocumentRepository = Depends(_get_repo),
     version_repo: DocumentVersionRepository = Depends(_get_version_repo),
 ):
-    _get_owned_collection(workspace_id, collection_id, current_user, db)
+    get_owned_collection(workspace_id, collection_id, current_user, db)
     document = repo.get_by_id(document_id)
     if document is None or document.collection_id != collection_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
@@ -300,7 +286,7 @@ def summarize_document(
     repo: DocumentRepository = Depends(_get_repo),
     llm: LLMProvider = Depends(get_llm_provider),
 ):
-    _get_owned_collection(workspace_id, collection_id, current_user, db)
+    get_owned_collection(workspace_id, collection_id, current_user, db)
 
     document = repo.get_by_id(document_id)
     if document is None or document.collection_id != collection_id:

@@ -5,3 +5,4 @@ from app.models.collection import Collection
 from app.models.document import Document
 from app.models.note import Note
 from app.models.document_version import DocumentVersion
+from app.models.workspace_invite import WorkspaceInvite

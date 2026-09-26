@@ -10,21 +10,10 @@ from app.api.deps import get_current_user
 from app.db.database import get_db
 from app.models.collection import Collection
 from app.models.user import User
-from app.models.workspace import Workspace
 from app.schemas.collection import CollectionCreate, CollectionOut, CollectionUpdate
+from app.api.access import get_owned_collection, get_workspace_or_404
 
 router = APIRouter(prefix="/workspaces/{workspace_id}/collections", tags=["collections"])
-
-
-def _get_owned_workspace(workspace_id: uuid.UUID, current_user: User, db: Session) -> Workspace:
-    workspace = db.get(Workspace, workspace_id)
-    if workspace is None or workspace.user_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Workspace not found",
-        )
-    return workspace
-
 
 @router.post("", response_model=CollectionOut, status_code=status.HTTP_201_CREATED)
 def create_collection(
@@ -33,7 +22,7 @@ def create_collection(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    _get_owned_workspace(workspace_id, current_user, db)
+    get_workspace_or_404(workspace_id, current_user, db)
 
     collection = Collection(
         workspace_id=workspace_id,
@@ -54,7 +43,7 @@ def list_collections(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    _get_owned_workspace(workspace_id, current_user, db)
+    get_workspace_or_404(workspace_id, current_user, db)
 
     collections = db.execute(
         select(Collection).where(Collection.workspace_id == workspace_id)
@@ -70,14 +59,9 @@ def get_collection(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    _get_owned_workspace(workspace_id, current_user, db)
+    get_workspace_or_404(workspace_id, current_user, db)
 
-    collection = db.get(Collection, collection_id)
-    if collection is None or collection.workspace_id != workspace_id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Collection not found",
-        )
+    collection = get_owned_collection(workspace_id, collection_id, current_user, db)
 
     return collection
 
@@ -90,14 +74,9 @@ def update_collection(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    _get_owned_workspace(workspace_id, current_user, db)
+    get_workspace_or_404(workspace_id, current_user, db)
 
-    collection = db.get(Collection, collection_id)
-    if collection is None or collection.workspace_id != workspace_id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Collection not found",
-        )
+    collection = get_owned_collection(workspace_id, collection_id, current_user, db)
 
     if payload.name is not None:
         collection.name = payload.name
@@ -117,14 +96,9 @@ def delete_collection(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    _get_owned_workspace(workspace_id, current_user, db)
+    get_workspace_or_404(workspace_id, current_user, db)
 
-    collection = db.get(Collection, collection_id)
-    if collection is None or collection.workspace_id != workspace_id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Collection not found",
-        )
+    collection = get_owned_collection(workspace_id, collection_id, current_user, db)
 
     db.delete(collection)
     db.commit()
