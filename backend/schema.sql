@@ -32,6 +32,20 @@ COMMENT ON EXTENSION pgcrypto IS 'cryptographic functions';
 
 
 --
+-- Name: vector; Type: EXTENSION; Schema: -; Owner: -
+--
+
+CREATE EXTENSION IF NOT EXISTS vector WITH SCHEMA public;
+
+
+--
+-- Name: EXTENSION vector; Type: COMMENT; Schema: -; Owner: -
+--
+
+COMMENT ON EXTENSION vector IS 'vector data type and ivfflat and hnsw access methods';
+
+
+--
 -- Name: set_updated_at(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -60,6 +74,20 @@ CREATE TABLE public.collections (
     description text,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: document_chunks; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.document_chunks (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    document_id uuid NOT NULL,
+    chunk_index integer NOT NULL,
+    content text NOT NULL,
+    embedding public.vector(1024),
+    created_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
 
@@ -132,6 +160,23 @@ CREATE TABLE public.users (
 
 
 --
+-- Name: workspace_invites; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.workspace_invites (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    workspace_id uuid NOT NULL,
+    email character varying(255) NOT NULL,
+    role character varying(20) DEFAULT 'member'::character varying NOT NULL,
+    token character varying(100) NOT NULL,
+    invited_by uuid NOT NULL,
+    accepted_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT workspace_invites_role_check CHECK (((role)::text = ANY ((ARRAY['owner'::character varying, 'member'::character varying])::text[])))
+);
+
+
+--
 -- Name: workspace_members; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -165,6 +210,22 @@ CREATE TABLE public.workspaces (
 
 ALTER TABLE ONLY public.collections
     ADD CONSTRAINT collections_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: document_chunks document_chunks_document_id_chunk_index_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.document_chunks
+    ADD CONSTRAINT document_chunks_document_id_chunk_index_key UNIQUE (document_id, chunk_index);
+
+
+--
+-- Name: document_chunks document_chunks_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.document_chunks
+    ADD CONSTRAINT document_chunks_pkey PRIMARY KEY (id);
 
 
 --
@@ -232,6 +293,30 @@ ALTER TABLE ONLY public.users
 
 
 --
+-- Name: workspace_invites workspace_invites_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.workspace_invites
+    ADD CONSTRAINT workspace_invites_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: workspace_invites workspace_invites_token_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.workspace_invites
+    ADD CONSTRAINT workspace_invites_token_key UNIQUE (token);
+
+
+--
+-- Name: workspace_invites workspace_invites_workspace_id_email_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.workspace_invites
+    ADD CONSTRAINT workspace_invites_workspace_id_email_key UNIQUE (workspace_id, email);
+
+
+--
 -- Name: workspace_members workspace_members_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -260,6 +345,13 @@ ALTER TABLE ONLY public.workspaces
 --
 
 CREATE INDEX idx_collections_workspace_id ON public.collections USING btree (workspace_id);
+
+
+--
+-- Name: idx_document_chunks_document_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_document_chunks_document_id ON public.document_chunks USING btree (document_id);
 
 
 --
@@ -295,6 +387,20 @@ CREATE INDEX idx_notes_user_id ON public.notes USING btree (user_id);
 --
 
 CREATE INDEX idx_notes_workspace_id ON public.notes USING btree (workspace_id);
+
+
+--
+-- Name: idx_workspace_invites_email; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_workspace_invites_email ON public.workspace_invites USING btree (email);
+
+
+--
+-- Name: idx_workspace_invites_token; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_workspace_invites_token ON public.workspace_invites USING btree (token);
 
 
 --
@@ -362,6 +468,14 @@ ALTER TABLE ONLY public.collections
 
 
 --
+-- Name: document_chunks document_chunks_document_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.document_chunks
+    ADD CONSTRAINT document_chunks_document_id_fkey FOREIGN KEY (document_id) REFERENCES public.documents(id) ON DELETE CASCADE;
+
+
+--
 -- Name: document_versions document_versions_document_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -407,6 +521,22 @@ ALTER TABLE ONLY public.notes
 
 ALTER TABLE ONLY public.notes
     ADD CONSTRAINT notes_workspace_id_fkey FOREIGN KEY (workspace_id) REFERENCES public.workspaces(id) ON DELETE CASCADE;
+
+
+--
+-- Name: workspace_invites workspace_invites_invited_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.workspace_invites
+    ADD CONSTRAINT workspace_invites_invited_by_fkey FOREIGN KEY (invited_by) REFERENCES public.users(id);
+
+
+--
+-- Name: workspace_invites workspace_invites_workspace_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.workspace_invites
+    ADD CONSTRAINT workspace_invites_workspace_id_fkey FOREIGN KEY (workspace_id) REFERENCES public.workspaces(id) ON DELETE CASCADE;
 
 
 --
