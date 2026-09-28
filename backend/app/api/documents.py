@@ -24,6 +24,13 @@ from datetime import datetime, timezone
 from app.services.llm import LLMProvider, get_llm_provider
 from app.services.text_extraction import extract_text
 from app.api.access import get_owned_collection
+from app.models.document_chunk import DocumentChunk
+from app.repositories.document_chunk_repository import (
+    DocumentChunkRepository,
+    get_document_chunk_repository,
+)
+from app.services.chunking import chunk_text
+from app.services.embeddings import EmbeddingProvider, get_embedding_provider
 
 router = APIRouter(
     prefix="/workspaces/{workspace_id}/collections/{collection_id}/documents",
@@ -37,6 +44,8 @@ def _get_repo(db: Session = Depends(get_db)) -> DocumentRepository:
 def _get_version_repo(db: Session = Depends(get_db)) -> DocumentVersionRepository:
     return get_document_version_repository(db)
 
+def _get_chunk_repo(db: Session = Depends(get_db)) -> DocumentChunkRepository:
+    return get_document_chunk_repository(db)
 
 @router.post("", response_model=DocumentOut, status_code=status.HTTP_201_CREATED)
 async def upload_document(
@@ -321,3 +330,55 @@ def summarize_document(
     db.refresh(document)
 
     return document
+
+@router.post("/{document_id}/ingest")
+def ingest_document(
+    workspace_id: uuid.UUID,
+    collection_id: uuid.UUID,
+    document_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    storage: StorageBackend = Depends(get_storage_backend),
+    repo: DocumentRepository = Depends(_get_repo),
+    chunk_repo: DocumentChunkRepository = Depends(_get_chunk_repo),
+    embeddings: EmbeddingProvider = Depends(get_embedding_provider),
+):
+    get_owned_collection(workspace_id, collection_id, current_user, db)
+
+    document = repo.get_by_id(document_id)
+    if document is None or document.collection_id != collection_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+
+    download_url = storage.download_url(document.storage_key)
+
+    import httpx
+    response = httpx.get(download_url)
+    response.raise_for_status()
+    file_bytes = response.content
+
+    try:
+        text = extract_text(file_bytes, document.file_type)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+    if not text.strip():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No extractable text found")
+
+    chunks_text = chunk_text(text)
+    if not chunks_text:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Document produced no chunks")
+
+    try:
+        vectors = embeddings.embed_documents(chunks_text)
+    except RuntimeError as e:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(e))
+
+    chunk_repo.delete_for_document(document_id)
+
+    new_chunks = [
+        DocumentChunk(document_id=document_id, chunk_index=i, content=c, embedding=vec)
+        for i, (c, vec) in enumerate(zip(chunks_text, vectors))
+    ]
+    chunk_repo.create_many(new_chunks)
+
+    return {"chunks_created": len(new_chunks)}

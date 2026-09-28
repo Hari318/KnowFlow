@@ -30,3 +30,5 @@ anthropic==0.40.0
 pypdf==5.1.0
 python-docx==1.1.2
 resend==2.4.0
+pgvector==0.3.6
+voyageai==0.3.2

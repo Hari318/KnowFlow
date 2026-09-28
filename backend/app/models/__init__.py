@@ -6,3 +6,4 @@ from app.models.document import Document
 from app.models.note import Note
 from app.models.document_version import DocumentVersion
 from app.models.workspace_invite import WorkspaceInvite
+from app.models.document_chunk import DocumentChunk

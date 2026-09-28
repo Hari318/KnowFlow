@@ -20,6 +20,8 @@ class Settings(BaseSettings):
     resend_api_key: str | None = None
     frontend_url: str = "http://localhost:3000"
 
+    voyage_api_key: str | None = None
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 

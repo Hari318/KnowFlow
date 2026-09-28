@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import auth, collections, config, documents, note, workspace_members, workspaces
+from app.api import auth, collections, config, documents, note, rag, workspace_members, workspaces
 
 app = FastAPI(title="KnowFlow API")
 
@@ -20,6 +20,7 @@ app.include_router(documents.router)
 app.include_router(note.router)
 app.include_router(config.router)
 app.include_router(workspace_members.router)
+app.include_router(rag.router)
 
 @app.get("/")
 def root():
