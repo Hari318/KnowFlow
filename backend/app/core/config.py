@@ -13,6 +13,13 @@ class Settings(BaseSettings):
     minio_secret_key: str
     minio_bucket: str
 
+    storage_backend: str = "minio"  # "minio" or "r2" — switches which backend get_storage_backend() returns
+
+    r2_account_id: str | None = None
+    r2_access_key: str | None = None
+    r2_secret_key: str | None = None
+    r2_bucket: str | None = None
+
     max_upload_size_mb: int = 20
 
     anthropic_api_key: str | None = None
