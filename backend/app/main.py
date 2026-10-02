@@ -7,7 +7,7 @@ app = FastAPI(title="KnowFlow API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=["http://localhost:3000", "https://know-flow-k5zj-cpjbalaab-hari-ba23.vercel.app"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
