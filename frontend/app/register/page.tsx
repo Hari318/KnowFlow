@@ -6,8 +6,9 @@ import { register, login } from "@/lib/auth";
 import { Button } from "@/components/Button";
 import { Input } from "@/components/Input";
 import { Card } from "@/components/Card";
+import { Suspense } from "react";
 
-export default function RegisterPage() {
+function RegisterForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const inviteToken = searchParams.get("invite") || undefined;
@@ -56,5 +57,13 @@ export default function RegisterPage() {
         </p>
       </Card>
     </div>
+  );
+}
+
+export default function RegisterPage() {
+  return (
+    <Suspense fallback={<p className="text-muted">Loading...</p>}>
+      <RegisterForm />
+    </Suspense>
   );
 }
