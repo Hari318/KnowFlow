@@ -2,25 +2,15 @@
 
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
 import { getMe, CurrentUser } from "./auth";
-import { Member } from "./members";
-
-interface ActiveWorkspace {
-  workspaceId: string;
-  members: Member[];
-  isOwner: boolean;
-}
 
 interface AppContextValue {
   currentUser: CurrentUser | null;
-  activeWorkspace: ActiveWorkspace | null;
-  setActiveWorkspace: (data: ActiveWorkspace | null) => void;
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
-  const [activeWorkspace, setActiveWorkspace] = useState<ActiveWorkspace | null>(null);
 
   useEffect(() => {
     const token = typeof window !== "undefined" ? localStorage.getItem("access_token") : null;
@@ -30,7 +20,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <AppContext.Provider value={{ currentUser, activeWorkspace, setActiveWorkspace }}>
+    <AppContext.Provider value={{ currentUser }}>
       {children}
     </AppContext.Provider>
   );

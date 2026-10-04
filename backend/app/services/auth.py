@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 import uuid
+import secrets
 from datetime import datetime, timedelta, timezone
 
 import bcrypt
 import jwt
 
 from app.core.config import settings
-
+from sqlalchemy.orm import Session
+from app.models.user import User
 
 def hash_password(password: str) -> str:
     password_bytes = password.encode("utf-8")
@@ -40,3 +42,10 @@ def create_refresh_token(user_id: uuid.UUID) -> str:
 
 def decode_token(token: str) -> dict:
     return jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
+
+def create_verification_token(db: Session, user: User) -> str:
+    token = secrets.token_urlsafe(32)
+    user.verification_token = token
+    user.verification_token_expires = datetime.now(timezone.utc) + timedelta(hours=24)
+    db.commit()
+    return token

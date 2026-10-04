@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.db.database import get_db
 from app.models.user import User
+from app.schemas.auth import VerifyEmailResponse
 from app.schemas.user import (
     AccessTokenOut,
     RefreshRequest,
@@ -17,10 +18,12 @@ from app.schemas.user import (
 from app.services.auth import (
     create_access_token,
     create_refresh_token,
+    create_verification_token,
     decode_token,
     hash_password,
     verify_password,
 )
+from app.services.email import send_verification_email
 from app.api.deps import get_current_user
 from datetime import datetime, timezone
 
@@ -46,6 +49,9 @@ def register(payload: UserCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(user)
 
+    verification_token = create_verification_token(db, user)
+    send_verification_email(user.email, verification_token)
+
     invited_workspace_id = None
 
     if payload.invite_token:
@@ -68,6 +74,7 @@ def register(payload: UserCreate, db: Session = Depends(get_db)):
         email=user.email,
         first_name=user.first_name,
         last_name=user.last_name,
+        is_verified=user.is_verified,
         created_at=user.created_at,
         invited_workspace_id=invited_workspace_id,
     )
@@ -116,3 +123,19 @@ def refresh(payload: RefreshRequest, db: Session = Depends(get_db)):
 @router.get("/me", response_model=UserOut)
 def get_me(current_user: User = Depends(get_current_user)):
     return current_user
+
+@router.get("/verify-email", response_model=VerifyEmailResponse)
+def verify_email(token: str, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.verification_token == token).first()
+    if not user:
+        raise HTTPException(status_code=400, detail="Invalid or expired token")
+
+    if user.verification_token_expires < datetime.now(timezone.utc):
+        raise HTTPException(status_code=400, detail="Token expired")
+
+    user.is_verified = True
+    user.verification_token = None
+    user.verification_token_expires = None
+    db.commit()
+
+    return VerifyEmailResponse(message="Email verified successfully", is_verified=True)

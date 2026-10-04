@@ -13,6 +13,7 @@ import { listNotes, deleteNote, Note } from "@/lib/notes";
 import { useWorkspaces } from "@/lib/workspaces-context";
 import { listMembers, Member } from "@/lib/members";
 import { useApp } from "@/lib/app-context";
+import { WorkspaceMembers } from "@/components/WorkspaceMembers";
 
 export default function WorkspaceDetailPage() {
   const { workspaceId } = useParams<{ workspaceId: string }>();
@@ -31,7 +32,7 @@ export default function WorkspaceDetailPage() {
   const { refresh } = useWorkspaces();
 
   const [members, setMembers] = useState<Member[]>([]);
-  const { currentUser, setActiveWorkspace } = useApp();
+  const { currentUser } = useApp();
   const isOwner = currentUser
     ? members.some((m) => m.user_id === currentUser.id && m.role === "owner")
     : false;
@@ -62,13 +63,6 @@ export default function WorkspaceDetailPage() {
     loadNotes();
     loadMembers();
   }, [workspaceId]);
-
-  useEffect(() => {
-  if (currentUser) {
-    setActiveWorkspace({ workspaceId, members, isOwner });
-  }
-  return () => setActiveWorkspace(null);
-  }, [workspaceId, members, currentUser, isOwner]);
 
   async function handleDelete() {
     if (!confirm("Delete this workspace? This cannot be undone.")) return;
@@ -137,9 +131,17 @@ export default function WorkspaceDetailPage() {
             )}
           </div>
         </div>
-        <p className="text-xs text-muted mt-4">
-          Created {new Date(workspace.created_at).toLocaleDateString()}
-        </p>
+        <div className="flex items-center justify-between mt-4">
+          <p className="text-xs text-muted">
+            Created {new Date(workspace.created_at).toLocaleDateString()}
+          </p>
+          <WorkspaceMembers
+            workspaceId={workspaceId}
+            members={members}
+            isOwner={isOwner}
+            onChanged={loadMembers}
+          />
+        </div>
       </Card>
 
       <div className="flex items-center justify-between mt-8 mb-4">

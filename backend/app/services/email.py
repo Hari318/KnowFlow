@@ -16,7 +16,7 @@ def send_workspace_invite_email(
     invite_url = f"{settings.frontend_url}/register?invite={token}"
 
     resend.Emails.send({
-        "from": "KnowFlow <onboarding@resend.dev>",
+        "from": "KnowFlow <invites@knowflowapp.dev>",
         "to": [to_email],
         "subject": f"{inviter_name} invited you to '{workspace_name}' on KnowFlow",
         "html": f"""
@@ -26,4 +26,21 @@ def send_workspace_invite_email(
             <p>If you already have a KnowFlow account, log in and the invite
             will be waiting for you.</p>
         """,
+    })
+
+def send_verification_email(to_email: str, token: str) -> None:
+    if not settings.resend_api_key:
+        raise RuntimeError("Email sending is not configured (RESEND_API_KEY missing).")
+
+    verify_url = f"{settings.frontend_url}/verify-email?token={token}"
+
+    resend.Emails.send({
+        "from": "KnowFlow <verify@knowflowapp.dev>",
+        "to": [to_email],
+        "subject": "Verify your KnowFlow account",
+        "html": f"""
+                <p>Welcome to KnowFlow! Please verify your email address to activate your account.</p>
+                <p><a href="{verify_url}">Click here to verify your email</a></p>
+                <p>This link expires in 24 hours.</p>
+            """,
     })

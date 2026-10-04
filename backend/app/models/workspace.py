@@ -67,4 +67,5 @@ class Workspace(Base):
     collections: Mapped[list[Collection]] = relationship(
         "Collection",
         back_populates="workspace",
+        cascade="all, delete-orphan",
     )

@@ -24,6 +24,7 @@ class UserOut(BaseModel):
     email: EmailStr
     first_name: str
     last_name: str | None
+    is_verified: bool
     created_at: datetime
     invited_workspace_id: uuid.UUID | None = None
 
