@@ -44,3 +44,20 @@ def send_verification_email(to_email: str, token: str) -> None:
                 <p>This link expires in 24 hours.</p>
             """,
     })
+
+def send_password_reset_email(to_email: str, token: str) -> None:
+    if not settings.resend_api_key:
+        raise RuntimeError("Email sending is not configured (RESEND_API_KEY missing).")
+
+    reset_url = f"{settings.frontend_url}/reset-password?token={token}"
+
+    resend.Emails.send({
+        "from": "KnowFlow <noreply@knowflowapp.dev>",
+        "to": [to_email],
+        "subject": "Reset your KnowFlow password",
+        "html": f"""
+            <p>We received a request to reset your KnowFlow password.</p>
+            <p><a href="{reset_url}">Click here to choose a new password</a></p>
+            <p>This link expires in 1 hour. If you didn't ask for this, you can ignore this email.</p>
+        """,
+    })

@@ -6,9 +6,12 @@ import { login } from "@/lib/auth";
 import { Button } from "@/components/Button";
 import { Input } from "@/components/Input";
 import { Card } from "@/components/Card";
+import { useApp } from "@/lib/app-context";
+import Link from "next/link";
 
 export default function LoginPage() {
   const router = useRouter();
+  const { refreshUser } = useApp();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -18,6 +21,7 @@ export default function LoginPage() {
     setError(null);
     try {
       await login(email, password);
+      await refreshUser();
       router.push("/dashboard");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login failed");
@@ -44,6 +48,9 @@ export default function LoginPage() {
             onChange={(e) => setPassword(e.target.value)}
             required
           />
+          <Link href="/forgot-password" className="text-sm text-accent hover:underline self-end">
+            Forgot password?
+          </Link>
           <Button type="submit">Log in</Button>
         </form>
         <p className="text-sm text-muted mt-4">
