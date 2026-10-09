@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.db.database import get_db
 from app.models.user import User
-from app.schemas.auth import VerifyEmailResponse
+from app.schemas.auth import ( VerifyEmailResponse, ForgotPasswordRequest, ResetPasswordRequest, MessageResponse )
 from app.schemas.user import (
     AccessTokenOut,
     RefreshRequest,
@@ -22,16 +22,20 @@ from app.services.auth import (
     decode_token,
     hash_password,
     verify_password,
+    create_reset_token,
+    hash_reset_token
 )
-from app.services.email import send_verification_email
+from app.services.email import (send_verification_email, send_password_reset_email )
 from app.api.deps import get_current_user
 from datetime import datetime, timezone
 
 from app.models.workspace_invite import WorkspaceInvite
 from app.models.workspace_member import WorkspaceMember
 
-router = APIRouter(prefix="/auth", tags=["auth"])
+import logging
 
+router = APIRouter(prefix="/auth", tags=["auth"])
+logger = logging.getLogger(__name__)
 
 @router.post("/register", response_model=UserOut, status_code=status.HTTP_201_CREATED)
 def register(payload: UserCreate, db: Session = Depends(get_db)):
@@ -139,3 +143,37 @@ def verify_email(token: str, db: Session = Depends(get_db)):
     db.commit()
 
     return VerifyEmailResponse(message="Email verified successfully", is_verified=True)
+
+@router.post("/forgot-password", response_model=MessageResponse)
+def forgot_password(payload: ForgotPasswordRequest, db: Session = Depends(get_db)):
+    user = db.execute(select(User).where(User.email == payload.email)).scalar_one_or_none()
+    if user:
+        token = create_reset_token(db, user)
+        try:
+            send_password_reset_email(user.email, token)
+        except Exception:
+            logger.exception("Failed to send password reset email")
+    # Same response whether or not the account exists
+    return MessageResponse(
+        message="If an account exists for that email, a reset link has been sent."
+    )
+
+
+@router.post("/reset-password", response_model=MessageResponse)
+def reset_password(payload: ResetPasswordRequest, db: Session = Depends(get_db)):
+    user = db.execute(
+        select(User).where(User.reset_token == hash_reset_token(payload.token))
+    ).scalar_one_or_none()
+
+    if (
+        not user
+        or user.reset_token_expires is None
+        or user.reset_token_expires < datetime.now(timezone.utc)
+    ):
+        raise HTTPException(status_code=400, detail="Invalid or expired reset link")
+
+    user.password_hash = hash_password(payload.new_password)
+    user.reset_token = None
+    user.reset_token_expires = None
+    db.commit()
+    return MessageResponse(message="Password updated. You can now log in.")

@@ -1,10 +1,18 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState, ReactNode } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useState,
+  ReactNode,
+} from "react";
 import { getMe, CurrentUser } from "./auth";
 
 interface AppContextValue {
   currentUser: CurrentUser | null;
+  refreshUser: () => Promise<void>;
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -12,15 +20,25 @@ const AppContext = createContext<AppContextValue | null>(null);
 export function AppProvider({ children }: { children: ReactNode }) {
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
 
-  useEffect(() => {
-    const token = typeof window !== "undefined" ? localStorage.getItem("access_token") : null;
-    if (token) {
-      getMe().then(setCurrentUser).catch(() => {});
+  const refreshUser = useCallback(async () => {
+    const token = localStorage.getItem("access_token");
+    if (!token) {
+      setCurrentUser(null);
+      return;
+    }
+    try {
+      setCurrentUser(await getMe());
+    } catch {
+      setCurrentUser(null);
     }
   }, []);
 
+  useEffect(() => {
+    refreshUser();
+  }, [refreshUser]);
+
   return (
-    <AppContext.Provider value={{ currentUser }}>
+    <AppContext.Provider value={{ currentUser, refreshUser }}>
       {children}
     </AppContext.Provider>
   );

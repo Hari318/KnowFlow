@@ -71,6 +71,22 @@ export function getMe() {
   return apiFetch<CurrentUser>("/auth/me");
 }
 
+export function forgotPassword(email: string) {
+  return apiFetch<{ message: string }>("/auth/forgot-password", {
+    method: "POST",
+    body: JSON.stringify({ email }),
+    skipAuth: true,
+  });
+}
+
+export function resetPassword(token: string, new_password: string) {
+  return apiFetch<{ message: string }>("/auth/reset-password", {
+    method: "POST",
+    body: JSON.stringify({ token, new_password }),
+    skipAuth: true,
+  });
+}
+
 export function logout() {
   localStorage.removeItem("access_token");
   localStorage.removeItem("refresh_token");

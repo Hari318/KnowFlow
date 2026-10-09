@@ -7,6 +7,8 @@ from datetime import datetime, timedelta, timezone
 import bcrypt
 import jwt
 
+import hashlib
+
 from app.core.config import settings
 from sqlalchemy.orm import Session
 from app.models.user import User
@@ -47,5 +49,16 @@ def create_verification_token(db: Session, user: User) -> str:
     token = secrets.token_urlsafe(32)
     user.verification_token = token
     user.verification_token_expires = datetime.now(timezone.utc) + timedelta(hours=24)
+    db.commit()
+    return token
+
+def hash_reset_token(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def create_reset_token(db: Session, user: User) -> str:
+    token = secrets.token_urlsafe(32)
+    user.reset_token = hash_reset_token(token)   # only the hash is stored
+    user.reset_token_expires = datetime.now(timezone.utc) + timedelta(hours=1)
     db.commit()
     return token

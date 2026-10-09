@@ -74,6 +74,16 @@ class User(Base):
         nullable=True,
     )
 
+    reset_token: Mapped[str | None] = mapped_column(
+        String(255),
+        nullable=True,
+    )
+
+    reset_token_expires: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
     workspaces: Mapped[list[Workspace]] = relationship(
         "Workspace",
         back_populates="owner",
