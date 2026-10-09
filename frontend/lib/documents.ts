@@ -14,6 +14,7 @@ export interface Document {
   summary_generated_at: string | null;
   created_at: string;
   updated_at: string;
+  is_indexed: boolean;
 }
 
 export function listDocuments(workspaceId: string, collectionId: string, search?: string) {
@@ -121,5 +122,12 @@ export function getVersionDownloadUrl(
 ) {
   return apiFetch<{ download_url: string }>(
     `/workspaces/${workspaceId}/collections/${collectionId}/documents/${documentId}/versions/${versionId}/download`
+  );
+}
+
+export function ingestDocument(workspaceId: string, collectionId: string, documentId: string) {
+  return apiFetch<{ chunks_created: number }>(
+    `/workspaces/${workspaceId}/collections/${collectionId}/documents/${documentId}/ingest`,
+    { method: "POST" }
   );
 }

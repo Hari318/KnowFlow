@@ -69,6 +69,7 @@ def ask_workspace(
                 chunk_index=chunk.chunk_index,
                 content=chunk.content,
                 similarity=round(1 - distance, 4),
+                collection_id=document.collection_id if document else None
             )
         )
 
