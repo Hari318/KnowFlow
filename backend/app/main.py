@@ -9,6 +9,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:3000",
+        "https://www.knowflowapp.dev",
+        "https://knowflowapp.dev",
         "https://know-flow-k5zj.vercel.app"
     ],
     allow_credentials=True,
