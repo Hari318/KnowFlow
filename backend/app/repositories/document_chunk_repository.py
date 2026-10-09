@@ -27,6 +27,16 @@ class SqlAlchemyDocumentChunkRepository:
         self._db.execute(delete(DocumentChunk).where(DocumentChunk.document_id == document_id))
         self._db.commit()
 
+    def indexed_document_ids(self, document_ids: list[uuid.UUID]) -> set[uuid.UUID]:
+        if not document_ids:
+            return set()
+        rows = self._db.execute(
+            select(DocumentChunk.document_id)
+            .where(DocumentChunk.document_id.in_(document_ids))
+            .distinct()
+        ).scalars().all()
+        return set(rows)
+
     def create_many(self, chunks: list[DocumentChunk]) -> None:
         self._db.add_all(chunks)
         self._db.commit()

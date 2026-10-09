@@ -19,9 +19,8 @@ import {getUploadLimits, UploadLimits} from "@/lib/config";
 import {PreviewModal} from "@/components/PreviewModal";
 import {Input} from "@/components/Input";
 import {Modal} from "@/components/Modal";
-import {Eye, Download, RefreshCw, History, Trash2} from "lucide-react";
-import {summarizeDocument} from "@/lib/documents";
-import {Sparkles} from "lucide-react";
+import {Eye, Download, Pencil, RefreshCw, Sparkles, History, Trash2, Database, CheckCircle2} from "lucide-react";
+import {summarizeDocument, ingestDocument} from "@/lib/documents";
 
 export default function CollectionDetailPage() {
     const {workspaceId, collectionId} = useParams<{
@@ -49,6 +48,9 @@ export default function CollectionDetailPage() {
 
     const [summarizingId, setSummarizingId] = useState<string | null>(null);
     const [summaryDoc, setSummaryDoc] = useState<Document | null>(null);
+
+    const [indexingId, setIndexingId] = useState<string | null>(null);
+    const [indexMessage, setIndexMessage] = useState<string | null>(null);
 
     function loadDocuments(searchTerm?: string) {
         listDocuments(workspaceId, collectionId, searchTerm)
@@ -203,6 +205,21 @@ export default function CollectionDetailPage() {
         }
     }
 
+    async function handleIndex(doc: Document) {
+        setIndexingId(doc.id);
+        setUploadError(null);
+        setIndexMessage(null);
+        try {
+            const {chunks_created} = await ingestDocument(workspaceId, collectionId, doc.id);
+            setIndexMessage(`"${doc.name}" is ready for Ask AI (${chunks_created} chunks indexed).`);
+            loadDocuments(search || undefined);
+        } catch (err) {
+            setUploadError(err instanceof Error ? err.message : "Indexing failed");
+        } finally {
+            setIndexingId(null);
+        }
+    }
+
     if (error) return <p className="text-danger">{error}</p>;
     if (!collection) return <p className="text-muted">Loading...</p>;
 
@@ -225,10 +242,19 @@ export default function CollectionDetailPage() {
                     </div>
                     <div className="flex gap-2">
                         <Link href={`/dashboard/${workspaceId}/${collectionId}/edit`}>
-                            <Button variant="secondary">Edit</Button>
+                            <Button
+                                variant="secondary"
+                                title="Edit"
+                            >
+                                <Pencil size={16}/>
+                            </Button>
                         </Link>
-                        <Button variant="danger" onClick={handleDeleteCollection}>
-                            Delete
+                        <Button
+                                variant="danger"
+                                title="Delete"
+                                onClick={handleDeleteCollection}
+                            >
+                                <Trash2 size={16}/>
                         </Button>
                     </div>
                 </div>
@@ -269,6 +295,7 @@ export default function CollectionDetailPage() {
                     : ""}
             </p>
             {uploadError && <p className="text-xs text-danger mb-4">{uploadError}</p>}
+            {indexMessage && <p className="text-xs text-accent mb-4">{indexMessage}</p>}
             <Input
                 type="text"
                 placeholder="Search documents..."
@@ -278,9 +305,25 @@ export default function CollectionDetailPage() {
             />
             <div className="flex flex-col gap-3">
                 {documents.map((doc) => (
-                    <Card key={doc.id} className="w-full flex items-center justify-between">
+                    <Card
+                        key={doc.id}
+                        className={`w-full flex items-center justify-between transition-colors ${
+                            doc.is_indexed ? "ring-1 ring-emerald-500/60" : ""
+                        }`}
+                    >
                         <div>
-                            <h3 className="font-medium text-foreground">{doc.name}</h3>
+                            <div className="flex items-center gap-2">
+                                <h3 className="font-medium text-foreground">{doc.name}</h3>
+                                {doc.is_indexed && (
+                                    <span
+                                        title="Indexed — Ask AI can answer from this document"
+                                        className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-xs font-medium text-emerald-400"
+                                    >
+                    <CheckCircle2 size={12}/>
+                    AI ready
+                </span>
+                                )}
+                            </div>
                             <p className="text-xs text-muted mt-1">
                                 {doc.file_type.toUpperCase()} · {formatFileSize(doc.file_size)} ·
                                 v{doc.version_number} ·{" "}
@@ -305,6 +348,21 @@ export default function CollectionDetailPage() {
                             </Button>
                             {summarizingId === doc.id && (
                                 <span className="text-xs text-muted self-center">Summarizing...</span>
+                            )}
+                            {!doc.is_indexed && (
+                                <>
+                                    <Button
+                                        variant="secondary"
+                                        title="Not searchable by AI yet — click to index"
+                                        disabled={indexingId === doc.id}
+                                        onClick={() => handleIndex(doc)}
+                                    >
+                                        <Database size={16}/>
+                                    </Button>
+                                    {indexingId === doc.id && (
+                                        <span className="text-xs text-muted self-center">Indexing...</span>
+                                    )}
+                                </>
                             )}
                             <Button
                                 variant="secondary"

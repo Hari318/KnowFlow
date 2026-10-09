@@ -15,6 +15,7 @@ class SourceChunk(BaseModel):
     chunk_index: int
     content: str
     similarity: float
+    collection_id: uuid.UUID | None = None
 
 
 class AskResponse(BaseModel):

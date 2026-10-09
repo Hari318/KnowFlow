@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, status
 from sqlalchemy.orm import Session
@@ -37,6 +38,7 @@ router = APIRouter(
     tags=["documents"],
 )
 
+logger = logging.getLogger(__name__)
 
 def _get_repo(db: Session = Depends(get_db)) -> DocumentRepository:
     return get_document_repository(db)
@@ -47,6 +49,40 @@ def _get_version_repo(db: Session = Depends(get_db)) -> DocumentVersionRepositor
 def _get_chunk_repo(db: Session = Depends(get_db)) -> DocumentChunkRepository:
     return get_document_chunk_repository(db)
 
+def _index_document(
+    document: Document,
+    file_bytes: bytes,
+    chunk_repo: DocumentChunkRepository,
+    embeddings: EmbeddingProvider,
+) -> int:
+    """Extract text, chunk, embed and store chunks. Replaces existing chunks.
+    Raises ValueError (nothing readable) or RuntimeError (embedding provider)."""
+    logger.warning("index debug: type=%s len=%d head=%r", document.file_type, len(file_bytes), file_bytes[:8])
+    try:
+        text = extract_text(file_bytes, document.file_type)
+    except ValueError:
+        raise
+    except Exception as e:
+        raise ValueError(f"Could not read this file: {e}") from e
+
+    if not text.strip():
+        raise ValueError("No extractable text found")
+
+    chunks_text = chunk_text(text)
+    if not chunks_text:
+        raise ValueError("Document produced no chunks")
+
+    vectors = embeddings.embed_documents(chunks_text)
+
+    chunk_repo.delete_for_document(document.id)
+    chunk_repo.create_many(
+        [
+            DocumentChunk(document_id=document.id, chunk_index=i, content=c, embedding=vec)
+            for i, (c, vec) in enumerate(zip(chunks_text, vectors))
+        ]
+    )
+    return len(chunks_text)
+
 @router.post("", response_model=DocumentOut, status_code=status.HTTP_201_CREATED)
 async def upload_document(
     workspace_id: uuid.UUID,
@@ -56,6 +92,8 @@ async def upload_document(
     db: Session = Depends(get_db),
     storage: StorageBackend = Depends(get_storage_backend),
     repo: DocumentRepository = Depends(_get_repo),
+    chunk_repo: DocumentChunkRepository = Depends(_get_chunk_repo),
+    embeddings: EmbeddingProvider = Depends(get_embedding_provider)
 ):
     get_owned_collection(workspace_id, collection_id, current_user, db)
 
@@ -102,7 +140,15 @@ async def upload_document(
         storage_key=storage_key,
     )
 
-    return repo.create(document)
+    created = repo.create(document)
+
+    try:
+        _index_document(created, file_bytes, chunk_repo, embeddings)
+    except (ValueError, RuntimeError) as e:
+        # The upload succeeded; the Index button can retry this.
+        logger.warning("Auto-indexing failed for document %s: %s", created.id, e)
+
+    return created
 
 
 @router.get("", response_model=list[DocumentOut])
@@ -113,9 +159,15 @@ def list_documents(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
     repo: DocumentRepository = Depends(_get_repo),
+    chunk_repo: DocumentChunkRepository = Depends(_get_chunk_repo)
 ):
     get_owned_collection(workspace_id, collection_id, current_user, db)
-    return repo.list_for_collection(collection_id, search=search)
+    documents = repo.list_for_collection(collection_id, search=search)
+    indexed = chunk_repo.indexed_document_ids([d.id for d in documents])
+    return [
+        DocumentOut.model_validate(d).model_copy(update={"is_indexed": d.id in indexed})
+        for d in documents
+    ]
 
 
 @router.get("/{document_id}", response_model=DocumentOut)
@@ -162,14 +214,28 @@ def delete_document(
     db: Session = Depends(get_db),
     storage: StorageBackend = Depends(get_storage_backend),
     repo: DocumentRepository = Depends(_get_repo),
+    version_repo: DocumentVersionRepository = Depends(_get_version_repo),
+    chunk_repo: DocumentChunkRepository = Depends(_get_chunk_repo),
 ):
     get_owned_collection(workspace_id, collection_id, current_user, db)
     document = repo.get_by_id(document_id)
     if document is None or document.collection_id != collection_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
 
-    storage.delete(document.storage_key)
+    # Collect every file for this document before its rows disappear
+    storage_keys = [document.storage_key] + [
+        v.storage_key for v in version_repo.list_for_document(document.id)
+    ]
+
+    chunk_repo.delete_for_document(document.id)
     repo.delete(document)
+
+    # Rows are gone; now remove the files. A storage hiccup must not undo the delete.
+    for key in storage_keys:
+        try:
+            storage.delete(key)
+        except Exception:
+            logger.warning("Could not delete storage object %s", key)
 
 @router.put("/{document_id}", response_model=DocumentOut)
 async def replace_document(
@@ -182,6 +248,8 @@ async def replace_document(
     storage: StorageBackend = Depends(get_storage_backend),
     repo: DocumentRepository = Depends(_get_repo),
     version_repo: DocumentVersionRepository = Depends(_get_version_repo),
+    chunk_repo: DocumentChunkRepository = Depends(_get_chunk_repo),
+    embeddings: EmbeddingProvider = Depends(get_embedding_provider)
 ):
     get_owned_collection(workspace_id, collection_id, current_user, db)
 
@@ -239,6 +307,15 @@ async def replace_document(
 
     db.commit()
     db.refresh(document)
+
+    try:
+        _index_document(document, file_bytes, chunk_repo, embeddings)
+    except (ValueError, RuntimeError) as e:
+        # Old chunks describe the previous file, so drop them rather than serve stale answers.
+        chunk_repo.delete_for_document(document.id)
+        db.commit()
+        logger.warning("Re-indexing failed for document %s: %s", document.id, e)
+
     return document
 
 
@@ -357,28 +434,10 @@ def ingest_document(
     file_bytes = response.content
 
     try:
-        text = extract_text(file_bytes, document.file_type)
+        chunks_created = _index_document(document, file_bytes, chunk_repo, embeddings)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-
-    if not text.strip():
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No extractable text found")
-
-    chunks_text = chunk_text(text)
-    if not chunks_text:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Document produced no chunks")
-
-    try:
-        vectors = embeddings.embed_documents(chunks_text)
     except RuntimeError as e:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(e))
 
-    chunk_repo.delete_for_document(document_id)
-
-    new_chunks = [
-        DocumentChunk(document_id=document_id, chunk_index=i, content=c, embedding=vec)
-        for i, (c, vec) in enumerate(zip(chunks_text, vectors))
-    ]
-    chunk_repo.create_many(new_chunks)
-
-    return {"chunks_created": len(new_chunks)}
+    return {"chunks_created": chunks_created}

@@ -14,6 +14,7 @@ import { useWorkspaces } from "@/lib/workspaces-context";
 import { listMembers, Member } from "@/lib/members";
 import { useApp } from "@/lib/app-context";
 import { WorkspaceMembers } from "@/components/WorkspaceMembers";
+import {MessagesSquare, Pencil, Trash2} from "lucide-react";
 
 export default function WorkspaceDetailPage() {
   const { workspaceId } = useParams<{ workspaceId: string }>();
@@ -119,13 +120,30 @@ export default function WorkspaceDetailPage() {
             )}
           </div>
           <div className="flex gap-2">
+            <Link href={`/dashboard/${workspace.id}/ask`}>
+              <Button
+                  variant="primary"
+                  title="Ask AI"
+              >
+                <MessagesSquare size={16}/>
+              </Button>
+            </Link>
             {isOwner && (
                 <>
                   <Link href={`/dashboard/${workspace.id}/edit`}>
-                    <Button variant="secondary">Edit</Button>
+                    <Button
+                        variant="secondary"
+                        title="Edit"
+                    >
+                      <Pencil size={16}/>
+                    </Button>
                   </Link>
-                  <Button variant="danger" onClick={handleDelete}>
-                    Delete
+                  <Button
+                      variant="danger"
+                      title="Delete"
+                      onClick={handleDelete}
+                  >
+                    <Trash2 size={16}/>
                   </Button>
                 </>
             )}

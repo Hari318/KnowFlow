@@ -20,6 +20,7 @@ class DocumentOut(BaseModel):
     summary_generated_at: datetime | None
     created_at: datetime
     updated_at: datetime
+    is_indexed: bool = False
 
     model_config = ConfigDict(from_attributes=True)
 
