@@ -32,6 +32,8 @@ from app.repositories.document_chunk_repository import (
 )
 from app.services.chunking import chunk_text
 from app.services.embeddings import EmbeddingProvider, get_embedding_provider
+from app.core.config import settings
+from app.services.rate_limit import check_rate_limit
 
 router = APIRouter(
     prefix="/workspaces/{workspace_id}/collections/{collection_id}/documents",
@@ -67,6 +69,12 @@ def _index_document(
 
     if not text.strip():
         raise ValueError("No extractable text found")
+
+    if len(text) > settings.max_index_chars:
+        raise ValueError(
+            f"Document is too large to index ({len(text):,} characters; "
+            f"limit is {settings.max_index_chars:,})"
+        )
 
     chunks_text = chunk_text(text)
     if not chunks_text:
@@ -381,7 +389,7 @@ def summarize_document(
     download_url = storage.download_url(document.storage_key)
 
     import httpx
-    response = httpx.get(download_url)
+    response = httpx.get(download_url, timeout=30)
     response.raise_for_status()
     file_bytes = response.content
 
@@ -421,7 +429,7 @@ def ingest_document(
     embeddings: EmbeddingProvider = Depends(get_embedding_provider),
 ):
     get_owned_collection(workspace_id, collection_id, current_user, db)
-
+    check_rate_limit("ingest", str(current_user.id), 20, 3600)
     document = repo.get_by_id(document_id)
     if document is None or document.collection_id != collection_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
@@ -429,7 +437,7 @@ def ingest_document(
     download_url = storage.download_url(document.storage_key)
 
     import httpx
-    response = httpx.get(download_url)
+    response = httpx.get(download_url, timeout=30)
     response.raise_for_status()
     file_bytes = response.content
 

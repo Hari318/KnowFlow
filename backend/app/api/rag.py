@@ -17,6 +17,8 @@ from app.repositories.document_repository import DocumentRepository, get_documen
 from app.schemas.rag import AskRequest, AskResponse, SourceChunk
 from app.services.embeddings import EmbeddingProvider, get_embedding_provider
 from app.services.llm import LLMProvider, get_llm_provider
+from app.core.config import settings
+from app.services.rate_limit import check_rate_limit
 
 router = APIRouter(prefix="/workspaces/{workspace_id}/ask", tags=["rag"])
 
@@ -39,8 +41,21 @@ def ask_workspace(
 ):
     get_workspace_or_404(workspace_id, current_user, db)
 
+    question = payload.question.strip()
+    if not question:
+        raise HTTPException(status_code=400, detail="Please enter a question.")
+    if len(question) > settings.max_question_chars:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Question is too long (max {settings.max_question_chars} characters).",
+        )
+
+    uid = str(current_user.id)
+    check_rate_limit("ask-min", uid, settings.ask_limit_per_minute, 60)
+    check_rate_limit("ask-hour", uid, settings.ask_limit_per_hour, 3600)
+
     try:
-        query_vector = embeddings.embed_query(payload.question)
+        query_vector = embeddings.embed_query(question)
     except RuntimeError as e:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(e))
 
@@ -55,7 +70,7 @@ def ask_workspace(
     context_texts = [chunk.content for chunk, _ in results]
 
     try:
-        answer = llm.answer_with_context(payload.question, context_texts)
+        answer = llm.answer_with_context(question, context_texts)
     except RuntimeError as e:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(e))
 

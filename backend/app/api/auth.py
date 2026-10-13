@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -33,12 +33,15 @@ from app.models.workspace_invite import WorkspaceInvite
 from app.models.workspace_member import WorkspaceMember
 
 import logging
+from app.core.config import settings
+from app.services.rate_limit import check_rate_limit, client_ip
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 logger = logging.getLogger(__name__)
 
 @router.post("/register", response_model=UserOut, status_code=status.HTTP_201_CREATED)
-def register(payload: UserCreate, db: Session = Depends(get_db)):
+def register(payload: UserCreate, request: Request, db: Session = Depends(get_db)):
+    check_rate_limit("register-ip", client_ip(request), settings.auth_limit_per_ip_per_hour, 3600)
     existing = db.execute(select(User).where(User.email == payload.email)).scalar_one_or_none()
     if existing:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email is already registered")
@@ -85,7 +88,9 @@ def register(payload: UserCreate, db: Session = Depends(get_db)):
 
 
 @router.post("/login", response_model=Token)
-def login(payload: UserLogin, db: Session = Depends(get_db)):
+def login(payload: UserLogin, request: Request, db: Session = Depends(get_db)):
+    check_rate_limit("login-ip", client_ip(request), settings.auth_limit_per_ip_per_hour, 3600)
+    check_rate_limit("login-email", payload.email.lower(), 10, 900)
     user = db.execute(
         select(User).where(User.email == payload.email)
     ).scalar_one_or_none()
@@ -145,7 +150,9 @@ def verify_email(token: str, db: Session = Depends(get_db)):
     return VerifyEmailResponse(message="Email verified successfully", is_verified=True)
 
 @router.post("/forgot-password", response_model=MessageResponse)
-def forgot_password(payload: ForgotPasswordRequest, db: Session = Depends(get_db)):
+def forgot_password(payload: ForgotPasswordRequest, request: Request, db: Session = Depends(get_db)):
+    check_rate_limit("forgot-ip", client_ip(request), 5, 3600)
+    check_rate_limit("forgot-email", payload.email.lower(), 3, 3600)
     user = db.execute(select(User).where(User.email == payload.email)).scalar_one_or_none()
     if user:
         token = create_reset_token(db, user)
