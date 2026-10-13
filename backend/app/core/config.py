@@ -28,6 +28,14 @@ class Settings(BaseSettings):
     frontend_url: str = "http://localhost:3000"
 
     voyage_api_key: str | None = None
+    
+    redis_url: str | None = None
+
+    ask_limit_per_minute: int = 5
+    ask_limit_per_hour: int = 30
+    max_question_chars: int = 1000
+    max_index_chars: int = 500_000
+    auth_limit_per_ip_per_hour: int = 30
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
