@@ -59,12 +59,21 @@ def ask_workspace(
     except RuntimeError as e:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(e))
 
-    results = chunk_repo.search_similar(workspace_id, query_vector, limit=5)
+    results = chunk_repo.search_similar(
+        workspace_id, query_vector, limit=5, collection_id=payload.collection_id,
+        document_id=payload.document_id
+        )
 
     if not results:
+        scoped = payload.collection_id or payload.document_id
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="No ingested documents found in this workspace. Ingest a document first.",
+            status_code=404,
+            detail=(
+                "No indexed documents found in the selected scope. "
+                "Index a document first, or choose a different scope."
+                if scoped
+                else "No ingested documents found in this workspace. Ingest a document first."
+            ),
         )
 
     context_texts = [chunk.content for chunk, _ in results]

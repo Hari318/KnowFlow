@@ -7,7 +7,8 @@ from pydantic import BaseModel
 
 class AskRequest(BaseModel):
     question: str
-
+    collection_id: uuid.UUID | None = None
+    document_id: uuid.UUID | None = None
 
 class SourceChunk(BaseModel):
     document_id: uuid.UUID

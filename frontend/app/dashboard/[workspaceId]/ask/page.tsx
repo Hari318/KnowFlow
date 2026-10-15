@@ -8,6 +8,7 @@ import { askWorkspace, SourceChunk } from "@/lib/rag";
 import { Button } from "@/components/Button";
 import { Input } from "@/components/Input";
 import { Markdown } from "@/components/Markdown";
+import { Collection, listCollections } from "@/lib/collections";
 
 interface Message {
   id: string;
@@ -97,6 +98,13 @@ export default function AskPage() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const [collections, setCollections] = useState<Collection[]>([]);
+  const [collectionId, setCollectionId] = useState<string>(""); // "" = whole workspace
+
+  useEffect(() => {
+    listCollections(workspaceId).then(setCollections).catch(() => {
+    });
+  }, [workspaceId]);
 
   useEffect(() => {
     workspaceService
@@ -124,7 +132,7 @@ export default function AskPage() {
     setLoading(true);
 
     try {
-      const res = await askWorkspace(workspaceId, question);
+      const res = await askWorkspace(workspaceId, question, collectionId ? { collection_id: collectionId } : undefined);
       setMessages((prev) => [
         ...prev,
         {
@@ -186,21 +194,43 @@ export default function AskPage() {
       </div>
 
       <form
-        onSubmit={handleSubmit}
-        className="sticky bottom-0 flex gap-2 bg-background pt-3 pb-4"
+          onSubmit={handleSubmit}
+          className="sticky bottom-0 flex flex-col gap-2 bg-background pt-3 pb-4"
       >
-        <div className="flex-1">
-          <Input
-            type="text"
-            placeholder="Ask a question about your documents…"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            disabled={loading}
-          />
+        <div className="flex items-center gap-2 text-sm">
+          <label htmlFor="scope" className="text-muted">
+            Search in
+          </label>
+          <select
+              id="scope"
+              value={collectionId}
+              onChange={(e) => setCollectionId(e.target.value)}
+              disabled={loading}
+              className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-foreground"
+          >
+            <option value="">All collections</option>
+            {collections.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+            ))}
+          </select>
         </div>
-        <Button type="submit" disabled={loading || !input.trim()}>
-          {loading ? "Asking…" : "Ask"}
-        </Button>
+
+        <div className="flex gap-2">
+          <div className="flex-1">
+            <Input
+                type="text"
+                placeholder="Ask a question about your documents…"
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                disabled={loading}
+            />
+          </div>
+          <Button type="submit" disabled={loading || !input.trim()}>
+            {loading ? "Asking…" : "Ask"}
+          </Button>
+        </div>
       </form>
     </div>
   );

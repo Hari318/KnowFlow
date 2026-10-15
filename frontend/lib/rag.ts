@@ -16,9 +16,12 @@ export interface AskResponse {
   sources: SourceChunk[];
 }
 
-export function askWorkspace(workspaceId: string, question: string) {
+export function askWorkspace(workspaceId: string, question: string, scope?: {
+  collection_id?: string;
+  document_id?: string,
+}) {
   return apiFetch<AskResponse>(`/workspaces/${workspaceId}/ask`, {
     method: "POST",
-    body: JSON.stringify({ question }),
+    body: JSON.stringify({ question, ...scope }),
   });
 }
