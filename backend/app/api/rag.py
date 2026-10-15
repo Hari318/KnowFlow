@@ -19,6 +19,7 @@ from app.services.embeddings import EmbeddingProvider, get_embedding_provider
 from app.services.llm import LLMProvider, get_llm_provider
 from app.core.config import settings
 from app.services.rate_limit import check_rate_limit
+from app.api.ai_guard import require_ai_access
 
 router = APIRouter(prefix="/workspaces/{workspace_id}/ask", tags=["rag"])
 
@@ -28,7 +29,7 @@ def _get_chunk_repo(db: Session = Depends(get_db)) -> DocumentChunkRepository:
 def _get_doc_repo(db: Session = Depends(get_db)) -> DocumentRepository:
     return get_document_repository(db)
 
-@router.post("", response_model=AskResponse)
+@router.post("", response_model=AskResponse, dependencies=[Depends(require_ai_access)])
 def ask_workspace(
     workspace_id: uuid.UUID,
     payload: AskRequest,
@@ -53,6 +54,7 @@ def ask_workspace(
     uid = str(current_user.id)
     check_rate_limit("ask-min", uid, settings.ask_limit_per_minute, 60)
     check_rate_limit("ask-hour", uid, settings.ask_limit_per_hour, 3600)
+    check_rate_limit("ask-day", uid, settings.ask_limit_per_day, 86400)
 
     try:
         query_vector = embeddings.embed_query(question)

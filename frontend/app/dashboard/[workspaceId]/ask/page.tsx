@@ -148,7 +148,7 @@ export default function AskPage() {
         ...prev,
         {
           id: crypto.randomUUID(),
-          role: error.status === 404 || error.status === 429 ? "notice" : "error",
+          role: [403, 404, 429, 503].includes(error.status ?? 0) ? "notice" : "error",
           text: error.message || "Something went wrong. Please try again.",
         },
       ]);
