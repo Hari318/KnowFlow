@@ -17,6 +17,7 @@ export interface CurrentUser {
   first_name: string;
   last_name: string | null;
   created_at: string;
+  is_verified: boolean;
 }
 
 export interface RegisterResponse {
@@ -84,6 +85,13 @@ export function resetPassword(token: string, new_password: string) {
     method: "POST",
     body: JSON.stringify({ token, new_password }),
     skipAuth: true,
+  });
+}
+
+export function resendVerification(email: string) {
+  return apiFetch<{ message: string }>("/auth/resend-verification", {
+    method: "POST",
+    body: JSON.stringify({ email }),
   });
 }
 

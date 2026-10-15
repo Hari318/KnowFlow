@@ -7,6 +7,14 @@ import { WorkspacesProvider, useWorkspaces } from "@/lib/workspaces-context";
 import { Button } from "@/components/Button";
 import { Input } from "@/components/Input";
 import { Modal } from "@/components/Modal";
+import { useApp } from "@/lib/app-context";
+import { VerifyEmailBanner } from "@/components/VerifyEmailBanner";
+
+function VerificationNotice() {
+  const { currentUser } = useApp();
+  if (!currentUser || currentUser.is_verified) return null;
+  return <VerifyEmailBanner email={currentUser.email} />;
+}
 
 function Sidebar() {
   const pathname = usePathname();
@@ -110,7 +118,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     <WorkspacesProvider>
       <div className="flex min-h-[calc(100vh-57px)]">
         <Sidebar />
-        <main className="flex-1 px-8 py-10">{children}</main>
+        <main className="flex-1 px-8 py-10">
+          <VerificationNotice />
+          {children}
+        </main>
       </div>
     </WorkspacesProvider>
   );
