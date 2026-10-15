@@ -37,6 +37,13 @@ class Settings(BaseSettings):
     max_index_chars: int = 500_000
     auth_limit_per_ip_per_hour: int = 30
 
+    ai_enabled: bool = True
+    ai_require_verified_email: bool = False  # flip on in Render when ready
+    ask_limit_per_day: int = 100
+
+    llm_answer_model: str = "claude-haiku-4-5-20251001"
+    llm_summary_model: str = "claude-sonnet-4-5"
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 
