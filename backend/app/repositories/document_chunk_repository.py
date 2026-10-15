@@ -16,7 +16,8 @@ class DocumentChunkRepository(Protocol):
     def delete_for_document(self, document_id: uuid.UUID) -> None: ...
     def create_many(self, chunks: list[DocumentChunk]) -> None: ...
     def search_similar(
-        self, workspace_id: uuid.UUID, query_embedding: list[float], limit: int = 5
+        self, workspace_id: uuid.UUID, query_embedding: list[float], limit: int = 5, collection_id: uuid.UUID | None = None,
+            document_id: uuid.UUID | None = None,
     ) -> list[tuple[DocumentChunk, float]]: ...
 
 class SqlAlchemyDocumentChunkRepository:
@@ -42,19 +43,27 @@ class SqlAlchemyDocumentChunkRepository:
         self._db.commit()
 
     def search_similar(
-        self, workspace_id: uuid.UUID, query_embedding: list[float], limit: int = 5
+            self,
+            workspace_id: uuid.UUID,
+            query_embedding: list[float],
+            limit: int = 5,
+            collection_id: uuid.UUID | None = None,
+            document_id: uuid.UUID | None = None,
     ) -> list[tuple[DocumentChunk, float]]:
         distance = DocumentChunk.embedding.cosine_distance(query_embedding)
 
-        results = self._db.execute(
+        stmt = (
             select(DocumentChunk, distance.label("distance"))
             .join(Document, Document.id == DocumentChunk.document_id)
             .join(Collection, Collection.id == Document.collection_id)
-            .where(Collection.workspace_id == workspace_id)
-            .order_by(distance)
-            .limit(limit)
-        ).all()
+            .where(Collection.workspace_id == workspace_id)  # always enforced
+        )
+        if collection_id is not None:
+            stmt = stmt.where(Document.collection_id == collection_id)
+        if document_id is not None:
+            stmt = stmt.where(Document.id == document_id)
 
+        results = self._db.execute(stmt.order_by(distance).limit(limit)).all()
         return [(row[0], row[1]) for row in results]
 
 def get_document_chunk_repository(db: Session) -> DocumentChunkRepository:
