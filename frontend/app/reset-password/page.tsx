@@ -5,7 +5,8 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { resetPassword } from "@/lib/auth";
 import { Button } from "@/components/Button";
-import { Input } from "@/components/Input";
+import { PasswordInput } from "@/components/PasswordInput";
+import { Spinner } from "@/components/Spinner";
 import { Card } from "@/components/Card";
 
 function ResetPasswordForm() {
@@ -18,6 +19,7 @@ function ResetPasswordForm() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (loading) return;
     setError(null);
     if (password !== confirm) {
       setError("Passwords don't match");
@@ -60,22 +62,27 @@ function ResetPasswordForm() {
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-3">
       {error && <p className="text-danger text-sm">{error}</p>}
-      <Input
-        type="password"
+      <PasswordInput
         placeholder="New password (min 8 characters)"
         value={password}
         onChange={(e) => setPassword(e.target.value)}
+        minLength={8}
         required
       />
-      <Input
-        type="password"
+      <PasswordInput
         placeholder="Confirm new password"
         value={confirm}
         onChange={(e) => setConfirm(e.target.value)}
         required
       />
       <Button type="submit" disabled={loading}>
-        {loading ? "Saving..." : "Set new password"}
+        {loading ? (
+          <span className="inline-flex items-center gap-2">
+            <Spinner /> Saving…
+          </span>
+        ) : (
+          "Set new password"
+        )}
       </Button>
     </form>
   );

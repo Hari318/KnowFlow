@@ -6,7 +6,13 @@ from sqlalchemy.orm import Session
 
 from app.db.database import get_db
 from app.models.user import User
-from app.schemas.auth import ( VerifyEmailResponse, ForgotPasswordRequest, ResetPasswordRequest, MessageResponse )
+from app.schemas.auth import (
+    VerifyEmailResponse,
+    ForgotPasswordRequest,
+    ResetPasswordRequest,
+    MessageResponse,
+    ResendVerificationRequest
+)
 from app.schemas.user import (
     AccessTokenOut,
     RefreshRequest,
@@ -184,3 +190,21 @@ def reset_password(payload: ResetPasswordRequest, db: Session = Depends(get_db))
     user.reset_token_expires = None
     db.commit()
     return MessageResponse(message="Password updated. You can now log in.")
+
+@router.post("/resend-verification")
+def resend_verification(
+    payload: ResendVerificationRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    email = payload.email.lower()
+    check_rate_limit("resend-ip", client_ip(request), 10, 3600)
+    check_rate_limit("resend-email", email, 3, 3600)
+
+    user = db.execute(select(User).where(User.email == payload.email)).scalar_one_or_none()
+    if user is not None and not user.is_verified:
+        token = create_verification_token(db, user)
+        send_verification_email(user.email, token)
+
+    # Same response whether or not the account exists
+    return {"message": "If that account exists and isn't verified, we've sent a new link."}
