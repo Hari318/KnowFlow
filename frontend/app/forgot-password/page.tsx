@@ -5,6 +5,7 @@ import Link from "next/link";
 import { forgotPassword } from "@/lib/auth";
 import { Button } from "@/components/Button";
 import { Input } from "@/components/Input";
+import { Spinner } from "@/components/Spinner";
 import { Card } from "@/components/Card";
 
 export default function ForgotPasswordPage() {
@@ -15,6 +16,7 @@ export default function ForgotPasswordPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (loading) return;
     setError(null);
     setLoading(true);
     try {
@@ -51,7 +53,13 @@ export default function ForgotPasswordPage() {
                 required
               />
               <Button type="submit" disabled={loading}>
-                {loading ? "Sending..." : "Send reset link"}
+                {loading ? (
+                  <span className="inline-flex items-center gap-2">
+                    <Spinner /> Sending…
+                  </span>
+                ) : (
+                  "Send reset link"
+                )}
               </Button>
             </form>
           </>

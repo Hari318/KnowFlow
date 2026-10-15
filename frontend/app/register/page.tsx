@@ -2,9 +2,12 @@
 
 import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { register, login } from "@/lib/auth";
 import { Button } from "@/components/Button";
 import { Input } from "@/components/Input";
+import { PasswordInput } from "@/components/PasswordInput";
+import { Spinner } from "@/components/Spinner";
 import { Card } from "@/components/Card";
 import { Suspense } from "react";
 
@@ -22,15 +25,16 @@ function RegisterForm() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (loading) return;
     setError(null);
     setLoading(true);
     try {
       const result = await register(email, password, firstName, lastName || undefined, inviteToken);
       await login(email, password);
       router.push(result.invited_workspace_id ? `/dashboard/${result.invited_workspace_id}` : "/dashboard");
+      // keep the spinner on: the page navigates away
     } catch (err) {
       setError(err instanceof Error ? err.message : "Registration failed");
-    } finally {
       setLoading(false);
     }
   }
@@ -46,14 +50,20 @@ function RegisterForm() {
           <Input type="text" placeholder="First name" value={firstName} onChange={(e) => setFirstName(e.target.value)} required />
           <Input type="text" placeholder="Last name (optional)" value={lastName} onChange={(e) => setLastName(e.target.value)} />
           <Input type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} required />
-          <Input type="password" placeholder="Password (min 8 characters)" value={password} onChange={(e) => setPassword(e.target.value)} minLength={8} required />
+          <PasswordInput placeholder="Password (min 8 characters)" value={password} onChange={(e) => setPassword(e.target.value)} minLength={8} required />
           <Button type="submit" disabled={loading}>
-            {loading ? "Creating account..." : "Sign up"}
+            {loading ? (
+              <span className="inline-flex items-center gap-2">
+                <Spinner /> Creating account…
+              </span>
+            ) : (
+              "Sign up"
+            )}
           </Button>
         </form>
         <p className="text-sm text-muted mt-4">
           Already have an account?{" "}
-          <a href="/login" className="text-accent hover:underline">Log in</a>
+          <Link href="/login" className="text-accent hover:underline">Log in</Link>
         </p>
       </Card>
     </div>

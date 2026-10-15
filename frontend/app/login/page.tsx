@@ -2,12 +2,14 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { login } from "@/lib/auth";
 import { Button } from "@/components/Button";
 import { Input } from "@/components/Input";
+import { PasswordInput } from "@/components/PasswordInput";
+import { Spinner } from "@/components/Spinner";
 import { Card } from "@/components/Card";
 import { useApp } from "@/lib/app-context";
-import Link from "next/link";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -15,16 +17,21 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (loading) return;
+    setLoading(true);
     setError(null);
     try {
       await login(email, password);
       await refreshUser();
       router.push("/dashboard");
+      // keep the spinner on: the page navigates away
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login failed");
+      setLoading(false);
     }
   }
 
@@ -41,8 +48,7 @@ export default function LoginPage() {
             onChange={(e) => setEmail(e.target.value)}
             required
           />
-          <Input
-            type="password"
+          <PasswordInput
             placeholder="Password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
@@ -51,13 +57,21 @@ export default function LoginPage() {
           <Link href="/forgot-password" className="text-sm text-accent hover:underline self-end">
             Forgot password?
           </Link>
-          <Button type="submit">Log in</Button>
+          <Button type="submit" disabled={loading}>
+            {loading ? (
+              <span className="inline-flex items-center gap-2">
+                <Spinner /> Signing in…
+              </span>
+            ) : (
+              "Sign in"
+            )}
+          </Button>
         </form>
         <p className="text-sm text-muted mt-4">
           Don&apos;t have an account?{" "}
-          <a href="/register" className="text-accent hover:underline">
+          <Link href="/register" className="text-accent hover:underline">
             Sign up
-          </a>
+          </Link>
         </p>
       </Card>
     </div>
