@@ -19,7 +19,7 @@ import {getUploadLimits, UploadLimits} from "@/lib/config";
 import {PreviewModal} from "@/components/PreviewModal";
 import {Input} from "@/components/Input";
 import {Modal} from "@/components/Modal";
-import {Eye, Download, Pencil, RefreshCw, Sparkles, History, Trash2, Database, CheckCircle2} from "lucide-react";
+import {Eye, Download, Pencil, RefreshCw, Sparkles, History, MessageSquare, Trash2, Database, CheckCircle2} from "lucide-react";
 import {summarizeDocument, ingestDocument} from "@/lib/documents";
 
 export default function CollectionDetailPage() {
@@ -319,9 +319,9 @@ export default function CollectionDetailPage() {
                                         title="Indexed — Ask AI can answer from this document"
                                         className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-xs font-medium text-emerald-400"
                                     >
-                    <CheckCircle2 size={12}/>
-                    AI ready
-                </span>
+                                        <CheckCircle2 size={12}/>
+                                            AI ready
+                                    </span>
                                 )}
                             </div>
                             <p className="text-xs text-muted mt-1">
@@ -363,6 +363,19 @@ export default function CollectionDetailPage() {
                                         <span className="text-xs text-muted self-center">Indexing...</span>
                                     )}
                                 </>
+                            )}
+                            {doc.is_indexed && (
+                                <Button
+                                    variant="secondary"
+                                    title="Ask AI about this document"
+                                    onClick={() =>
+                                        router.push(
+                                            `/dashboard/${workspaceId}/ask?document=${doc.id}&name=${encodeURIComponent(doc.name)}`
+                                        )
+                                    }
+                                >
+                                    <MessageSquare size={16}/>
+                                </Button>
                             )}
                             <Button
                                 variant="secondary"
