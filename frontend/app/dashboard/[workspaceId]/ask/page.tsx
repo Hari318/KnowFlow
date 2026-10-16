@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { useParams } from "next/navigation";
+import { Suspense, useEffect, useRef, useState } from "react";
+import { useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { workspaceService, Workspace } from "@/lib/workspaces";
 import { askWorkspace, SourceChunk } from "@/lib/rag";
@@ -90,9 +90,9 @@ function MessageBubble({
   );
 }
 
-export default function AskPage() {
+function AskContent() {
   const { workspaceId } = useParams<{ workspaceId: string }>();
-
+  const searchParams = useSearchParams();
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
@@ -100,6 +100,11 @@ export default function AskPage() {
   const bottomRef = useRef<HTMLDivElement>(null);
   const [collections, setCollections] = useState<Collection[]>([]);
   const [collectionId, setCollectionId] = useState<string>(""); // "" = whole workspace
+
+  const [documentScope, setDocumentScope] = useState<{ id: string; name: string } | null>(() => {
+    const id = searchParams.get("document");
+    return id ? { id, name: searchParams.get("name") || "this document" } : null;
+  });
 
   useEffect(() => {
     listCollections(workspaceId).then(setCollections).catch(() => {
@@ -132,7 +137,13 @@ export default function AskPage() {
     setLoading(true);
 
     try {
-      const res = await askWorkspace(workspaceId, question, collectionId ? { collection_id: collectionId } : undefined);
+      const scope = documentScope
+          ? {document_id: documentScope.id}
+          : collectionId
+              ? {collection_id: collectionId}
+              : undefined;
+
+      const res = await askWorkspace(workspaceId, question, scope);
       setMessages((prev) => [
         ...prev,
         {
@@ -197,31 +208,53 @@ export default function AskPage() {
           onSubmit={handleSubmit}
           className="sticky bottom-0 flex flex-col gap-2 bg-background pt-3 pb-4"
       >
-        <div className="flex items-center gap-2 text-sm">
-          <label htmlFor="scope" className="text-muted">
-            Search in
-          </label>
-          <select
-              id="scope"
-              value={collectionId}
-              onChange={(e) => setCollectionId(e.target.value)}
-              disabled={loading}
-              className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-foreground"
-          >
-            <option value="">All collections</option>
-            {collections.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-            ))}
-          </select>
-        </div>
+        {documentScope ? (
+            <div className="flex items-center gap-2 text-sm">
+              <span className="text-muted">Asking about</span>
+              <span
+                  className="inline-flex items-center gap-2 rounded-full border border-border bg-surface px-3 py-1 text-foreground">
+        <span className="max-w-[16rem] truncate">{documentScope.name}</span>
+        <button
+            type="button"
+            onClick={() => setDocumentScope(null)}
+            aria-label="Ask across all documents instead"
+            className="text-muted hover:text-foreground"
+        >
+          ×
+        </button>
+      </span>
+            </div>
+        ) : (
+            <div className="flex items-center gap-2 text-sm">
+              <label htmlFor="scope" className="text-muted">
+                Search in
+              </label>
+              <select
+                  id="scope"
+                  value={collectionId}
+                  onChange={(e) => setCollectionId(e.target.value)}
+                  disabled={loading}
+                  className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-foreground"
+              >
+                <option value="">All collections</option>
+                {collections.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                ))}
+              </select>
+            </div>
+        )}
 
         <div className="flex gap-2">
           <div className="flex-1">
             <Input
                 type="text"
-                placeholder="Ask a question about your documents…"
+                placeholder={
+                  documentScope
+                      ? "Ask about this document…"
+                      : "Ask a question about your documents…"
+                }
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 disabled={loading}
@@ -233,5 +266,13 @@ export default function AskPage() {
         </div>
       </form>
     </div>
+  );
+}
+
+export default function AskPage() {
+  return (
+    <Suspense fallback={null}>
+      <AskContent />
+    </Suspense>
   );
 }
