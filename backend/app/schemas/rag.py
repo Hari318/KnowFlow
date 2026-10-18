@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import uuid
 
-from pydantic import BaseModel
-
+from pydantic import BaseModel, Field
+from typing import Literal
 
 class AskRequest(BaseModel):
     question: str
     collection_id: uuid.UUID | None = None
     document_id: uuid.UUID | None = None
+    history: list[HistoryMessage] = Field(default_factory=list, max_length=12)
 
 class SourceChunk(BaseModel):
     document_id: uuid.UUID
@@ -22,3 +23,7 @@ class SourceChunk(BaseModel):
 class AskResponse(BaseModel):
     answer: str
     sources: list[SourceChunk]
+
+class HistoryMessage(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str

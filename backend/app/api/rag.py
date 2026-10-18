@@ -29,6 +29,21 @@ def _get_chunk_repo(db: Session = Depends(get_db)) -> DocumentChunkRepository:
 def _get_doc_repo(db: Session = Depends(get_db)) -> DocumentRepository:
     return get_document_repository(db)
 
+def _clean_history(items) -> list[dict]:
+    """Keep the last 6 turns, alternating roles, starting with user and ending with assistant."""
+    cleaned: list[dict] = []
+    for m in items[-6:]:
+        entry = {"role": m.role, "content": m.content[:2000]}
+        if cleaned and cleaned[-1]["role"] == m.role:
+            cleaned[-1] = entry
+        else:
+            cleaned.append(entry)
+    while cleaned and cleaned[0]["role"] != "user":
+        cleaned.pop(0)
+    if cleaned and cleaned[-1]["role"] == "user":
+        cleaned.pop()
+    return cleaned
+
 @router.post("", response_model=AskResponse, dependencies=[Depends(require_ai_access)])
 def ask_workspace(
     workspace_id: uuid.UUID,
@@ -56,8 +71,10 @@ def ask_workspace(
     check_rate_limit("ask-hour", uid, settings.ask_limit_per_hour, 3600)
     check_rate_limit("ask-day", uid, settings.ask_limit_per_day, 86400)
 
+    history = _clean_history(payload.history)
     try:
-        query_vector = embeddings.embed_query(question)
+        search_query = llm.condense_question(history, question) if history else question
+        query_vector = embeddings.embed_query(search_query)
     except RuntimeError as e:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(e))
 
@@ -81,7 +98,7 @@ def ask_workspace(
     context_texts = [chunk.content for chunk, _ in results]
 
     try:
-        answer = llm.answer_with_context(question, context_texts)
+        answer = llm.answer_with_context(question, context_texts, history)
     except RuntimeError as e:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(e))
 

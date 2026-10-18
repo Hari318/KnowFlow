@@ -13,7 +13,10 @@ logger = logging.getLogger(__name__)
 
 class LLMProvider(Protocol):
     def summarize(self, text: str) -> str: ...
-    def answer_with_context(self, question: str, context_chunks: list[str]) -> str: ...
+    def condense_question(self, history: list[dict], question: str) -> str: ...
+    def answer_with_context(
+            self, question: str, context_chunks: list[dict] | list[str], history: list[dict] | None = None
+    ) -> str: ...
 
 class AnthropicLLMProvider:
     def __init__(self) -> None:
@@ -56,7 +59,29 @@ class AnthropicLLMProvider:
             ) from e
         return message.content[0].text
 
-    def answer_with_context(self, question: str, context_chunks: list[str]) -> str:
+    def condense_question(self, history: list[dict], question: str) -> str:
+        if self._client is None:
+            raise RuntimeError("This feature is unavailable: ANTHROPIC_API_KEY is not configured.")
+        transcript = "\n".join(f"{m['role'].capitalize()}: {m['content']}" for m in history[-4:])
+        try:
+            message = self._client.messages.create(
+                model=settings.llm_answer_model,
+                max_tokens=150,
+                messages=[{
+                    "role": "user",
+                    "content": (
+                        "Rewrite the follow-up question as a standalone search query that includes "
+                        "any context it needs from the conversation. If it is already standalone, "
+                        "return it unchanged. Output only the query.\n\n"
+                        f"Conversation:\n{transcript}\n\nFollow-up: {question}"
+                    ),
+                }],
+            )
+        except anthropic.APIError:
+            return question  # fall back to the raw question
+        return message.content[0].text.strip() or question
+
+    def answer_with_context(self, question: str, context_chunks: list[str], history: list[dict] | None = None) -> str:
         if self._client is None:
             raise RuntimeError("This feature is unavailable: ANTHROPIC_API_KEY is not configured.")
 
@@ -67,11 +92,13 @@ class AnthropicLLMProvider:
         try:
             message = self._client.messages.create(
                 model=settings.llm_answer_model,
-                max_tokens=800,
+                max_tokens=1500,
                 messages=[
+                    *(history or []),
                     {
                         "role": "user",
                         "content": (
+                            "Earlier messages are conversation context only; [Source N] numbers refer only to the sources below."
                             "Answer the question using ONLY the information in the sources "
                             "below. If the sources don't contain enough information to answer, "
                             "say so clearly rather than guessing. When you use information from "

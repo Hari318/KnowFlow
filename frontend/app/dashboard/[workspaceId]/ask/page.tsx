@@ -1,218 +1,241 @@
 "use client";
 
-import { Suspense, useEffect, useRef, useState } from "react";
-import { useParams, useSearchParams } from "next/navigation";
+import {Suspense, useEffect, useRef, useState} from "react";
+import {useParams, useSearchParams} from "next/navigation";
 import Link from "next/link";
-import { workspaceService, Workspace } from "@/lib/workspaces";
-import { askWorkspace, SourceChunk } from "@/lib/rag";
-import { Button } from "@/components/Button";
-import { Input } from "@/components/Input";
-import { Markdown } from "@/components/Markdown";
-import { Collection, listCollections } from "@/lib/collections";
+import {workspaceService, Workspace} from "@/lib/workspaces";
+import {askWorkspace, SourceChunk} from "@/lib/rag";
+import {Button} from "@/components/Button";
+import {Input} from "@/components/Input";
+import {Markdown} from "@/components/Markdown";
+import {Collection, listCollections} from "@/lib/collections";
 
 interface Message {
-  id: string;
-  role: "user" | "assistant" | "notice" | "error";
-  text: string;
-  sources?: SourceChunk[];
+    id: string;
+    role: "user" | "assistant" | "notice" | "error";
+    text: string;
+    sources?: SourceChunk[];
 }
 
 function MessageBubble({
-  message,
-  workspaceId,
-}: {
-  message: Message;
-  workspaceId: string;
+                           message,
+                           workspaceId,
+                       }: {
+    message: Message;
+    workspaceId: string;
 }) {
-  if (message.role === "user") {
+    if (message.role === "user") {
+        return (
+            <div
+                className="self-end max-w-[85%] rounded-lg bg-accent px-4 py-2 text-sm text-accent-foreground whitespace-pre-wrap">
+                {message.text}
+            </div>
+        );
+    }
+
+    if (message.role === "error") {
+        return (
+            <div className="self-start max-w-[85%] rounded-lg border border-danger px-4 py-3 text-sm text-danger">
+                {message.text}
+            </div>
+        );
+    }
+
+    if (message.role === "notice") {
+        return (
+            <div
+                className="self-start max-w-[85%] rounded-lg border border-border bg-surface px-4 py-3 text-sm text-muted">
+                {message.text}
+            </div>
+        );
+    }
+
     return (
-      <div className="self-end max-w-[85%] rounded-lg bg-accent px-4 py-2 text-sm text-accent-foreground whitespace-pre-wrap">
-        {message.text}
-      </div>
-    );
-  }
+        <div className="self-start max-w-[85%] rounded-lg border border-border bg-surface px-4 py-3">
+            <Markdown>{message.text}</Markdown>
 
-  if (message.role === "error") {
-    return (
-      <div className="self-start max-w-[85%] rounded-lg border border-danger px-4 py-3 text-sm text-danger">
-        {message.text}
-      </div>
-    );
-  }
-
-  if (message.role === "notice") {
-    return (
-      <div className="self-start max-w-[85%] rounded-lg border border-border bg-surface px-4 py-3 text-sm text-muted">
-        {message.text}
-      </div>
-    );
-  }
-
-  return (
-    <div className="self-start max-w-[85%] rounded-lg border border-border bg-surface px-4 py-3">
-      <Markdown>{message.text}</Markdown>
-
-      {message.sources && message.sources.length > 0 && (
-        <details className="mt-3 text-sm">
-          <summary className="cursor-pointer text-muted hover:text-foreground">
-            Sources ({message.sources.length})
-          </summary>
-          <ul className="mt-2 flex flex-col gap-2">
-            {message.sources.map((s) => (
-              <li
-                key={`${s.document_id}-${s.chunk_index}`}
-                className="rounded border border-border p-3"
-              >
-                <div className="flex items-center justify-between gap-2">
-                  {s.collection_id ? (
-                    <Link
-                      href={`/dashboard/${workspaceId}/${s.collection_id}`}
-                      className="font-medium text-foreground truncate hover:text-accent"
-                    >
-                      {s.document_name}
-                    </Link>
-                  ) : (
-                    <span className="font-medium text-foreground truncate">
+            {message.sources && message.sources.length > 0 && (
+                <details className="mt-3 text-sm">
+                    <summary className="cursor-pointer text-muted hover:text-foreground">
+                        Sources ({message.sources.length})
+                    </summary>
+                    <ul className="mt-2 flex flex-col gap-2">
+                        {message.sources.map((s) => (
+                            <li
+                                key={`${s.document_id}-${s.chunk_index}`}
+                                className="rounded border border-border p-3"
+                            >
+                                <div className="flex items-center justify-between gap-2">
+                                    {s.collection_id ? (
+                                        <Link
+                                            href={`/dashboard/${workspaceId}/${s.collection_id}`}
+                                            className="font-medium text-foreground truncate hover:text-accent"
+                                        >
+                                            {s.document_name}
+                                        </Link>
+                                    ) : (
+                                        <span className="font-medium text-foreground truncate">
                       {s.document_name}
                     </span>
-                  )}
-                  <span className="text-xs text-muted shrink-0">
+                                    )}
+                                    <span className="text-xs text-muted shrink-0">
                     {Math.round(s.similarity * 100)}% match
                   </span>
-                </div>
-                <p className="mt-1 text-xs text-muted line-clamp-3">{s.content}</p>
-              </li>
-            ))}
-          </ul>
-        </details>
-      )}
-    </div>
-  );
+                                </div>
+                                <p className="mt-1 text-xs text-muted line-clamp-3">{s.content}</p>
+                            </li>
+                        ))}
+                    </ul>
+                </details>
+            )}
+        </div>
+    );
 }
 
 function AskContent() {
-  const { workspaceId } = useParams<{ workspaceId: string }>();
-  const searchParams = useSearchParams();
-  const [workspace, setWorkspace] = useState<Workspace | null>(null);
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [input, setInput] = useState("");
-  const [loading, setLoading] = useState(false);
-  const bottomRef = useRef<HTMLDivElement>(null);
-  const [collections, setCollections] = useState<Collection[]>([]);
-  const [collectionId, setCollectionId] = useState<string>(""); // "" = whole workspace
+    const {workspaceId} = useParams<{ workspaceId: string }>();
+    const searchParams = useSearchParams();
+    const [workspace, setWorkspace] = useState<Workspace | null>(null);
+    const [messages, setMessages] = useState<Message[]>([]);
+    const [input, setInput] = useState("");
+    const [loading, setLoading] = useState(false);
+    const bottomRef = useRef<HTMLDivElement>(null);
+    const [collections, setCollections] = useState<Collection[]>([]);
+    const [collectionId, setCollectionId] = useState<string>(""); // "" = whole workspace
 
-  const [documentScope, setDocumentScope] = useState<{ id: string; name: string } | null>(() => {
-    const id = searchParams.get("document");
-    return id ? { id, name: searchParams.get("name") || "this document" } : null;
-  });
-
-  useEffect(() => {
-    listCollections(workspaceId).then(setCollections).catch(() => {
+    const [documentScope, setDocumentScope] = useState<{ id: string; name: string } | null>(() => {
+        const id = searchParams.get("document");
+        return id ? {id, name: searchParams.get("name") || "this document"} : null;
     });
-  }, [workspaceId]);
 
-  useEffect(() => {
-    workspaceService
-      .get(workspaceId)
-      .then(setWorkspace)
-      .catch(() => {});
-  }, [workspaceId]);
+    useEffect(() => {
+        listCollections(workspaceId).then(setCollections).catch(() => {
+        });
+    }, [workspaceId]);
 
-  useEffect(() => {
-    if (messages.length > 0) {
-      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    useEffect(() => {
+        workspaceService
+            .get(workspaceId)
+            .then(setWorkspace)
+            .catch(() => {
+            });
+    }, [workspaceId]);
+
+    useEffect(() => {
+        if (messages.length > 0) {
+            bottomRef.current?.scrollIntoView({behavior: "smooth"});
+        }
+    }, [messages, loading]);
+
+    async function handleSubmit(e: React.FormEvent) {
+        e.preventDefault();
+        const question = input.trim();
+        if (!question || loading) return;
+
+        setMessages((prev) => [
+            ...prev,
+            {id: crypto.randomUUID(), role: "user", text: question},
+        ]);
+        setInput("");
+        setLoading(true);
+
+        try {
+            const scope = documentScope
+                ? {document_id: documentScope.id}
+                : collectionId
+                    ? {collection_id: collectionId}
+                    : undefined;
+
+            const history: { role: "user" | "assistant"; content: string }[] = [];
+            for (let i = 0; i < messages.length - 1; i++) {
+                const a = messages[i];
+                const b = messages[i + 1];
+                if (a.role === "user" && b.role === "assistant") {
+                    history.push({role: "user", content: a.text}, {role: "assistant", content: b.text});
+                }
+            }
+            const recentHistory = history.slice(-6);
+            const res = await askWorkspace(workspaceId, question, scope, recentHistory);
+            setMessages((prev) => [
+                ...prev,
+                {
+                    id: crypto.randomUUID(),
+                    role: "assistant",
+                    text: res.answer,
+                    sources: res.sources,
+                },
+            ]);
+        } catch (err) {
+            const error = err as Error & { status?: number };
+            setMessages((prev) => [
+                ...prev,
+                {
+                    id: crypto.randomUUID(),
+                    role: [403, 404, 429, 503].includes(error.status ?? 0) ? "notice" : "error",
+                    text: error.message || "Something went wrong. Please try again.",
+                },
+            ]);
+        } finally {
+            setLoading(false);
+        }
     }
-  }, [messages, loading]);
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    const question = input.trim();
-    if (!question || loading) return;
+    return (
+        <div className="flex flex-col">
+            <div className="mb-6">
+                <Link
+                    href={`/dashboard/${workspaceId}`}
+                    className="text-sm text-muted hover:text-foreground"
+                >
+                    ← {workspace?.name ?? "Back to workspace"}
+                </Link>
+                <h1 className="text-xl font-medium text-foreground mt-2">Ask AI</h1>
+                <p className="text-sm text-muted mt-1">
+                    Answers come from the documents you&apos;ve indexed in this workspace.
+                </p>
+                {messages.length > 0 && (
+                    <button
+                        type="button"
+                        onClick={() => setMessages([])}
+                        className="text-sm text-muted hover:text-foreground"
+                    >
+                        New chat
+                    </button>
+                )}
+            </div>
+            <p className="text-sm text-muted mt-1">
+                Answers come from the documents you&apos;ve indexed in this workspace.
+            </p>
+            <div className="flex flex-col gap-4 min-h-[50vh]">
+                {messages.length === 0 && !loading && (
+                    <div className="rounded-lg border border-dashed border-border p-8 text-center text-sm text-muted">
+                        Ask a question about your documents, for example &ldquo;What are the
+                        key deadlines in the project plan?&rdquo;
+                    </div>
+                )}
 
-    setMessages((prev) => [
-      ...prev,
-      { id: crypto.randomUUID(), role: "user", text: question },
-    ]);
-    setInput("");
-    setLoading(true);
+                {messages.map((m) => (
+                    <MessageBubble key={m.id} message={m} workspaceId={workspaceId}/>
+                ))}
 
-    try {
-      const scope = documentScope
-          ? {document_id: documentScope.id}
-          : collectionId
-              ? {collection_id: collectionId}
-              : undefined;
+                {loading && (
+                    <div className="self-start rounded-lg border border-border bg-surface px-4 py-3 text-sm text-muted">
+                        Thinking…
+                    </div>
+                )}
 
-      const res = await askWorkspace(workspaceId, question, scope);
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: crypto.randomUUID(),
-          role: "assistant",
-          text: res.answer,
-          sources: res.sources,
-        },
-      ]);
-    } catch (err) {
-      const error = err as Error & { status?: number };
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: crypto.randomUUID(),
-          role: [403, 404, 429, 503].includes(error.status ?? 0) ? "notice" : "error",
-          text: error.message || "Something went wrong. Please try again.",
-        },
-      ]);
-    } finally {
-      setLoading(false);
-    }
-  }
+                <div ref={bottomRef}/>
+            </div>
 
-  return (
-    <div className="flex flex-col">
-      <div className="mb-6">
-        <Link
-          href={`/dashboard/${workspaceId}`}
-          className="text-sm text-muted hover:text-foreground"
-        >
-          ← {workspace?.name ?? "Back to workspace"}
-        </Link>
-        <h1 className="text-xl font-medium text-foreground mt-2">Ask AI</h1>
-        <p className="text-sm text-muted mt-1">
-          Answers come from the documents you&apos;ve indexed in this workspace.
-        </p>
-      </div>
-
-      <div className="flex flex-col gap-4 min-h-[50vh]">
-        {messages.length === 0 && !loading && (
-          <div className="rounded-lg border border-dashed border-border p-8 text-center text-sm text-muted">
-            Ask a question about your documents, for example &ldquo;What are the
-            key deadlines in the project plan?&rdquo;
-          </div>
-        )}
-
-        {messages.map((m) => (
-          <MessageBubble key={m.id} message={m} workspaceId={workspaceId} />
-        ))}
-
-        {loading && (
-          <div className="self-start rounded-lg border border-border bg-surface px-4 py-3 text-sm text-muted">
-            Thinking…
-          </div>
-        )}
-
-        <div ref={bottomRef} />
-      </div>
-
-      <form
-          onSubmit={handleSubmit}
-          className="sticky bottom-0 flex flex-col gap-2 bg-background pt-3 pb-4"
-      >
-        {documentScope ? (
-            <div className="flex items-center gap-2 text-sm">
-              <span className="text-muted">Asking about</span>
-              <span
-                  className="inline-flex items-center gap-2 rounded-full border border-border bg-surface px-3 py-1 text-foreground">
+            <form
+                onSubmit={handleSubmit}
+                className="sticky bottom-0 flex flex-col gap-2 bg-background pt-3 pb-4"
+            >
+                {documentScope ? (
+                    <div className="flex items-center gap-2 text-sm">
+                        <span className="text-muted">Asking about</span>
+                        <span
+                            className="inline-flex items-center gap-2 rounded-full border border-border bg-surface px-3 py-1 text-foreground">
         <span className="max-w-[16rem] truncate">{documentScope.name}</span>
         <button
             type="button"
@@ -223,56 +246,56 @@ function AskContent() {
           ×
         </button>
       </span>
-            </div>
-        ) : (
-            <div className="flex items-center gap-2 text-sm">
-              <label htmlFor="scope" className="text-muted">
-                Search in
-              </label>
-              <select
-                  id="scope"
-                  value={collectionId}
-                  onChange={(e) => setCollectionId(e.target.value)}
-                  disabled={loading}
-                  className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-foreground"
-              >
-                <option value="">All collections</option>
-                {collections.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                ))}
-              </select>
-            </div>
-        )}
+                    </div>
+                ) : (
+                    <div className="flex items-center gap-2 text-sm">
+                        <label htmlFor="scope" className="text-muted">
+                            Search in
+                        </label>
+                        <select
+                            id="scope"
+                            value={collectionId}
+                            onChange={(e) => setCollectionId(e.target.value)}
+                            disabled={loading}
+                            className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-foreground"
+                        >
+                            <option value="">All collections</option>
+                            {collections.map((c) => (
+                                <option key={c.id} value={c.id}>
+                                    {c.name}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+                )}
 
-        <div className="flex gap-2">
-          <div className="flex-1">
-            <Input
-                type="text"
-                placeholder={
-                  documentScope
-                      ? "Ask about this document…"
-                      : "Ask a question about your documents…"
-                }
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                disabled={loading}
-            />
-          </div>
-          <Button type="submit" disabled={loading || !input.trim()}>
-            {loading ? "Asking…" : "Ask"}
-          </Button>
+                <div className="flex gap-2">
+                    <div className="flex-1">
+                        <Input
+                            type="text"
+                            placeholder={
+                                documentScope
+                                    ? "Ask about this document…"
+                                    : "Ask a question about your documents…"
+                            }
+                            value={input}
+                            onChange={(e) => setInput(e.target.value)}
+                            disabled={loading}
+                        />
+                    </div>
+                    <Button type="submit" disabled={loading || !input.trim()}>
+                        {loading ? "Asking…" : "Ask"}
+                    </Button>
+                </div>
+            </form>
         </div>
-      </form>
-    </div>
-  );
+    );
 }
 
 export default function AskPage() {
-  return (
-    <Suspense fallback={null}>
-      <AskContent />
-    </Suspense>
-  );
+    return (
+        <Suspense fallback={null}>
+            <AskContent/>
+        </Suspense>
+    );
 }
