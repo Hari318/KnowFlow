@@ -20,14 +20,19 @@ from app.services.llm import LLMProvider, get_llm_provider
 from app.core.config import settings
 from app.services.rate_limit import check_rate_limit
 from app.api.ai_guard import require_ai_access
+import logging
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/workspaces/{workspace_id}/ask", tags=["rag"])
+
 
 def _get_chunk_repo(db: Session = Depends(get_db)) -> DocumentChunkRepository:
     return get_document_chunk_repository(db)
 
+
 def _get_doc_repo(db: Session = Depends(get_db)) -> DocumentRepository:
     return get_document_repository(db)
+
 
 def _clean_history(items) -> list[dict]:
     """Keep the last 6 turns, alternating roles, starting with user and ending with assistant."""
@@ -44,16 +49,25 @@ def _clean_history(items) -> list[dict]:
         cleaned.pop()
     return cleaned
 
+def _rerank_results(embeddings, query: str, results: list, top_k: int) -> list:
+    """Reorder vector-search hits with the reranker; fall back to vector order on any failure."""
+    try:
+        order = embeddings.rerank(query, [chunk.content for chunk, _ in results], top_k)
+    except Exception:
+        logger.warning("rerank failed, using vector order", exc_info=True)
+        return results[:top_k]
+    return [results[i] for i in order]
+
 @router.post("", response_model=AskResponse, dependencies=[Depends(require_ai_access)])
 def ask_workspace(
-    workspace_id: uuid.UUID,
-    payload: AskRequest,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-    embeddings: EmbeddingProvider = Depends(get_embedding_provider),
-    chunk_repo: DocumentChunkRepository = Depends(_get_chunk_repo),
-    doc_repo: DocumentRepository = Depends(_get_doc_repo),
-    llm: LLMProvider = Depends(get_llm_provider),
+        workspace_id: uuid.UUID,
+        payload: AskRequest,
+        current_user: User = Depends(get_current_user),
+        db: Session = Depends(get_db),
+        embeddings: EmbeddingProvider = Depends(get_embedding_provider),
+        chunk_repo: DocumentChunkRepository = Depends(_get_chunk_repo),
+        doc_repo: DocumentRepository = Depends(_get_doc_repo),
+        llm: LLMProvider = Depends(get_llm_provider),
 ):
     get_workspace_or_404(workspace_id, current_user, db)
 
@@ -78,10 +92,18 @@ def ask_workspace(
     except RuntimeError as e:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(e))
 
+    final_k = 10 if payload.document_id else 8
+    if payload.document_id:
+        candidates_k = settings.whole_doc_max_chunks + 1
+    elif settings.rerank_enabled:
+        candidates_k = settings.rerank_candidates
+    else:
+        candidates_k = final_k
+
     results = chunk_repo.search_similar(
-        workspace_id, query_vector, limit=5, collection_id=payload.collection_id,
-        document_id=payload.document_id
-        )
+        workspace_id, query_vector, limit=candidates_k,
+        collection_id=payload.collection_id, document_id=payload.document_id,
+    )
 
     if not results:
         scoped = payload.collection_id or payload.document_id
@@ -94,6 +116,17 @@ def ask_workspace(
                 else "No ingested documents found in this workspace. Ingest a document first."
             ),
         )
+
+    if payload.document_id and len(results) <= settings.whole_doc_max_chunks:
+        pass  # small document: send every chunk, ranking can only lose information
+    elif settings.rerank_enabled and len(results) > 1:
+        results = _rerank_results(embeddings, search_query, results, final_k)
+    else:
+        results = results[:final_k]
+
+    if payload.document_id:
+        # single document: present chunks in reading order
+        results = sorted(results, key=lambda r: r[0].chunk_index)
 
     context_texts = [chunk.content for chunk, _ in results]
 

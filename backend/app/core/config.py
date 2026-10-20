@@ -40,6 +40,10 @@ class Settings(BaseSettings):
     ai_enabled: bool = True
     ai_require_verified_email: bool = False  # flip on in Render when ready
     ask_limit_per_day: int = 100
+    rerank_enabled: bool = True
+    rerank_model: str = "rerank-2.5-lite"
+    rerank_candidates: int = 40
+    whole_doc_max_chunks: int = 40  # documents up to this many chunks are sent whole, no ranking
 
     llm_answer_model: str = "claude-haiku-4-5-20251001"
     llm_summary_model: str = "claude-sonnet-4-5"

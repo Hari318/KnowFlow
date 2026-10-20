@@ -10,7 +10,7 @@ from app.core.config import settings
 class EmbeddingProvider(Protocol):
     def embed_documents(self, texts: list[str]) -> list[list[float]]: ...
     def embed_query(self, text: str) -> list[float]: ...
-
+    def rerank(self, query: str, documents: list[str], top_k: int) -> list[int]: ...
 
 class VoyageEmbeddingProvider:
     def __init__(self) -> None:
@@ -32,6 +32,14 @@ class VoyageEmbeddingProvider:
         result = self._client.embed([text], model="voyage-4-lite", input_type="query")
         return result.embeddings[0]
 
+    def rerank(self, query: str, documents: list[str], top_k: int) -> list[int]:
+        """Return indexes of `documents`, best match first (at most top_k)."""
+        if self._client is None:
+            raise RuntimeError("Reranking is unavailable: VOYAGE_API_KEY is not configured.")
+        result = self._client.rerank(
+            query, documents, model=settings.rerank_model, top_k=top_k
+        )
+        return [r.index for r in result.results]
 
 _embedding_provider: EmbeddingProvider = VoyageEmbeddingProvider()
 
