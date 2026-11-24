@@ -38,6 +38,7 @@ class Settings(BaseSettings):
     auth_limit_per_ip_per_hour: int = 30
 
     ai_enabled: bool = True
+    hybrid_enabled: bool = True
     ai_require_verified_email: bool = False  # flip on in Render when ready
     ask_limit_per_day: int = 100
     rerank_enabled: bool = True
