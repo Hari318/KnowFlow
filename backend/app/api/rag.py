@@ -23,6 +23,10 @@ from app.api.ai_guard import require_ai_access
 import logging
 
 logger = logging.getLogger(__name__)
+NO_RELEVANT_ANSWER = (
+    "I couldn't find anything relevant to that in the selected documents. "
+    "Try rephrasing, choosing a different scope, or asking about something the documents cover."
+)
 router = APIRouter(prefix="/workspaces/{workspace_id}/ask", tags=["rag"])
 
 
@@ -117,8 +121,18 @@ def ask_workspace(
             ),
         )
 
-    if payload.document_id and len(results) <= settings.whole_doc_max_chunks:
+    # results come back ordered by distance, so the first one is the best match
+    best_similarity = 1 - results[0][1]
+    whole_doc = bool(payload.document_id) and len(results) <= settings.whole_doc_max_chunks
+    logger.warning(
+        "ask best_similarity=%.3f chunks=%d whole_doc=%s",
+        best_similarity, len(results), whole_doc,
+    )
+
+    if whole_doc:
         pass  # small document: send every chunk, ranking can only lose information
+    elif best_similarity < settings.min_similarity:
+        return AskResponse(answer=NO_RELEVANT_ANSWER, sources=[])
     elif settings.rerank_enabled and len(results) > 1:
         results = _rerank_results(embeddings, search_query, results, final_k)
     else:

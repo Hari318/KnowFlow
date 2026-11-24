@@ -44,6 +44,7 @@ class Settings(BaseSettings):
     rerank_model: str = "rerank-2.5-lite"
     rerank_candidates: int = 40
     whole_doc_max_chunks: int = 40  # documents up to this many chunks are sent whole, no ranking
+    min_similarity: float = 0.28  # below this best-match score, answer "nothing relevant" without calling the LLM
 
     llm_answer_model: str = "claude-haiku-4-5-20251001"
     llm_summary_model: str = "claude-sonnet-4-5"
