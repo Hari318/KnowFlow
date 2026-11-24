@@ -20,6 +20,7 @@ from app.services.llm import LLMProvider, get_llm_provider
 from app.core.config import settings
 from app.services.rate_limit import check_rate_limit
 from app.api.ai_guard import require_ai_access
+from app.services.hybrid import reciprocal_rank_fusion
 import logging
 
 logger = logging.getLogger(__name__)
@@ -99,17 +100,17 @@ def ask_workspace(
     final_k = 10 if payload.document_id else 8
     if payload.document_id:
         candidates_k = settings.whole_doc_max_chunks + 1
-    elif settings.rerank_enabled:
+    elif settings.rerank_enabled or settings.hybrid_enabled:
         candidates_k = settings.rerank_candidates
     else:
         candidates_k = final_k
 
-    results = chunk_repo.search_similar(
+    vector_results = chunk_repo.search_similar(
         workspace_id, query_vector, limit=candidates_k,
         collection_id=payload.collection_id, document_id=payload.document_id,
     )
 
-    if not results:
+    if not vector_results:
         scoped = payload.collection_id or payload.document_id
         raise HTTPException(
             status_code=404,
@@ -121,22 +122,48 @@ def ask_workspace(
             ),
         )
 
-    # results come back ordered by distance, so the first one is the best match
-    best_similarity = 1 - results[0][1]
-    whole_doc = bool(payload.document_id) and len(results) <= settings.whole_doc_max_chunks
-    logger.warning(
+    # vector results come back ordered by distance, so the first one is the best match
+    best_similarity = 1 - vector_results[0][1]
+    whole_doc = bool(payload.document_id) and len(vector_results) <= settings.whole_doc_max_chunks
+    logger.info(
         "ask best_similarity=%.3f chunks=%d whole_doc=%s",
-        best_similarity, len(results), whole_doc,
+        best_similarity, len(vector_results), whole_doc,
     )
 
     if whole_doc:
-        pass  # small document: send every chunk, ranking can only lose information
-    elif best_similarity < settings.min_similarity:
-        return AskResponse(answer=NO_RELEVANT_ANSWER, sources=[])
-    elif settings.rerank_enabled and len(results) > 1:
-        results = _rerank_results(embeddings, search_query, results, final_k)
+        results = vector_results  # small document: send every chunk, ranking can only lose information
     else:
-        results = results[:final_k]
+        if best_similarity < settings.min_similarity:
+            # weak vector match: only continue if some chunk contains ALL the query words
+            exact_hit = settings.hybrid_enabled and bool(
+                chunk_repo.search_keyword(
+                    workspace_id, search_query, query_vector, limit=1,
+                    collection_id=payload.collection_id, document_id=payload.document_id,
+                    match_all=True,
+                )
+            )
+            if not exact_hit:
+                return AskResponse(answer=NO_RELEVANT_ANSWER, sources=[])
+            logger.info("gate bypassed by exact keyword match")
+
+        results = vector_results
+        if settings.hybrid_enabled:
+            keyword_results = chunk_repo.search_keyword(
+                workspace_id, search_query, query_vector,
+                limit=settings.rerank_candidates,
+                collection_id=payload.collection_id, document_id=payload.document_id,
+            )
+            results = reciprocal_rank_fusion([vector_results, keyword_results])[
+                : settings.rerank_candidates
+            ]
+            logger.warning(
+                "hybrid vector=%d keyword=%d fused=%d",
+                len(vector_results), len(keyword_results), len(results),
+            )
+        if settings.rerank_enabled and len(results) > 1:
+            results = _rerank_results(embeddings, search_query, results, final_k)
+        else:
+            results = results[:final_k]
 
     if payload.document_id:
         # single document: present chunks in reading order
